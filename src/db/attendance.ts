@@ -15,18 +15,45 @@ const isUuid = (id: unknown): id is string => typeof id === 'string' && UUID_RE.
 
 /**
  * Records the answer as one upsert: a person has exactly one row per outing. A change keeps
- * answered_at (first answer) and moves updated_at. Pass `db` to run inside a transaction.
+ * answered_at (first answer) and moves updated_at. Not going also deletes the person's vote
+ * (BR-11) in the same transaction; the upsert locks the attendance row first, so a concurrent
+ * castVote cannot slip a vote in between. Pass `db` to run inside the caller's transaction;
+ * without it the function opens its own.
  */
 export async function setAnswer(
   outingId: string,
   participantId: string,
   going: boolean,
-  db: Queryable = getPool(),
+  db?: Queryable,
 ): Promise<void> {
   if (!isUuid(outingId) || !isUuid(participantId)) {
     throw new Error('Invalid outing or participant id');
   }
   if (typeof going !== 'boolean') throw new Error('Invalid answer');
+  if (db) return writeAnswer(db, outingId, participantId, going);
+
+  const client = await getPool().connect();
+  let failure: Error | undefined;
+  try {
+    await client.query('BEGIN');
+    await writeAnswer(client, outingId, participantId, going);
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => undefined);
+    failure = err instanceof Error ? err : new Error(String(err));
+    throw err;
+  } finally {
+    // A failed client may hold a broken connection: passing the error makes pg discard it.
+    client.release(failure);
+  }
+}
+
+async function writeAnswer(
+  db: Queryable,
+  outingId: string,
+  participantId: string,
+  going: boolean,
+): Promise<void> {
   await db.query(
     `INSERT INTO attendance (outing_id, participant_id, going)
      VALUES ($1, $2, $3)
@@ -34,6 +61,12 @@ export async function setAnswer(
      DO UPDATE SET going = EXCLUDED.going, updated_at = now()`,
     [outingId, participantId, going],
   );
+  if (!going) {
+    await db.query('DELETE FROM votes WHERE outing_id = $1 AND participant_id = $2', [
+      outingId,
+      participantId,
+    ]);
+  }
 }
 
 /** true = Going, false = Not going, null = not answered (or a malformed id). */

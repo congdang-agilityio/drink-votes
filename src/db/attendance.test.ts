@@ -5,6 +5,7 @@ import { createOuting } from './outings.js';
 import { createParticipant } from './participants.js';
 import { closePool, getPool } from './pool.js';
 import { createVenue } from './venues.js';
+import { castVote, getVote, getVoteCounts } from './votes.js';
 
 const UNKNOWN = '00000000-0000-4000-8000-000000000000';
 
@@ -154,6 +155,47 @@ describe('attendance store', () => {
       client.release();
     }
     expect(await getAnswer(outingId, lan.id)).toBeNull();
+  });
+
+  it('Not going removes the vote; switching back to Going creates none', async () => {
+    const organizer = await createParticipant('Minh');
+    const lan = await createParticipant('Lan');
+    const hoa = await createParticipant('Hoa');
+    const outingId = await newOuting(organizer.id);
+    const [a] = (await getVoteCounts(outingId)).map((c) => c.venueId);
+    await setAnswer(outingId, lan.id, true);
+    await setAnswer(outingId, hoa.id, true);
+    await castVote(outingId, lan.id, a);
+    await castVote(outingId, hoa.id, a);
+    expect((await getVoteCounts(outingId))[0].count).toBe(2);
+
+    await setAnswer(outingId, lan.id, false);
+    expect((await getVoteCounts(outingId))[0].count).toBe(1);
+    expect(await getVote(outingId, lan.id)).toBeNull();
+    expect(await getVote(outingId, hoa.id)).toBe(a);
+
+    await setAnswer(outingId, lan.id, true);
+    expect(await getVote(outingId, lan.id)).toBeNull();
+    expect((await getVoteCounts(outingId))[0].count).toBe(1);
+  });
+
+  it('Not going on a given client removes the vote only when that transaction commits', async () => {
+    const organizer = await createParticipant('Minh');
+    const lan = await createParticipant('Lan');
+    const outingId = await newOuting(organizer.id);
+    const [a] = (await getVoteCounts(outingId)).map((c) => c.venueId);
+    await setAnswer(outingId, lan.id, true);
+    await castVote(outingId, lan.id, a);
+    const client = await getPool().connect();
+    try {
+      await client.query('BEGIN');
+      await setAnswer(outingId, lan.id, false, client);
+      await client.query('ROLLBACK');
+    } finally {
+      client.release();
+    }
+    expect(await getAnswer(outingId, lan.id)).toBe(true);
+    expect(await getVote(outingId, lan.id)).toBe(a);
   });
 
   it('returns null / empty for malformed or unknown ids', async () => {
