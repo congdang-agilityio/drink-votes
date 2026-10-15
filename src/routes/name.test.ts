@@ -1,0 +1,124 @@
+import { afterAll, beforeEach, describe, expect, it } from 'vitest';
+import { createApp } from '../app.js';
+import { closePool, getPool } from '../db/pool.js';
+import { DISPLAY_NAME_MAX_LENGTH } from '../lib/display-name.js';
+import { resetDb } from '../test/db.js';
+
+const post = (
+  fields: Record<string, string>,
+  url = 'http://localhost/name',
+  headers: Record<string, string> = {},
+) =>
+  createApp().request(url, {
+    method: 'POST',
+    headers: { 'content-type': 'application/x-www-form-urlencoded', ...headers },
+    body: new URLSearchParams(fields).toString(),
+  });
+
+const count = async () =>
+  Number((await getPool().query('SELECT count(*) FROM participants')).rows[0].count);
+
+describe('/name', () => {
+  beforeEach(async () => {
+    await resetDb();
+  });
+
+  afterAll(async () => {
+    await closePool();
+  });
+
+  it('renders the Vietnamese form carrying next', async () => {
+    const res = await createApp().request('/name?next=/outings/abc');
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    expect(html).toContain('Bạn tên gì?');
+    expect(html).toContain('Tiếp tục');
+    expect(html).toMatch(/<input[^>]*type="hidden"[^>]*name="next"[^>]*value="\/outings\/abc"/);
+    expect(html).toMatch(/<header/);
+    expect(html).not.toMatch(/password|mật khẩu|đăng nhập|tài khoản/i);
+  });
+
+  it.each(['', '   ', ' \t '])('refuses blank name %j with 400 and creates nothing', async (n) => {
+    const res = await post({ name: n, next: '/outings/abc' });
+    expect(res.status).toBe(400);
+    const html = await res.text();
+    expect(html).toContain('Vui lòng nhập tên của bạn.');
+    expect(html).toContain('value="/outings/abc"');
+    expect(res.headers.get('set-cookie')).toBeNull();
+    expect(await count()).toBe(0);
+  });
+
+  it('creates a participant, sets dv_pid and redirects to next', async () => {
+    const res = await post({ name: '  Lan ', next: '/outings/abc' });
+    expect(res.status).toBe(303);
+    expect(res.headers.get('location')).toBe('/outings/abc');
+    const rows = (await getPool().query('SELECT id, display_name FROM participants')).rows;
+    expect(rows).toHaveLength(1);
+    expect(rows[0].display_name).toBe('Lan');
+    const cookie = res.headers.get('set-cookie') ?? '';
+    expect(cookie).toContain(`dv_pid=${rows[0].id}`);
+    expect(cookie).toMatch(/HttpOnly/i);
+    expect(cookie).toMatch(/SameSite=Lax/i);
+    expect(cookie).toMatch(/Path=\//);
+    expect(cookie).toMatch(/Max-Age=31536000/);
+    expect(cookie).not.toMatch(/Secure/i);
+  });
+
+  it('marks the cookie Secure on HTTPS', async () => {
+    const res = await post({ name: 'Lan', next: '/' }, 'https://localhost/name');
+    expect(res.headers.get('set-cookie')).toMatch(/Secure/i);
+  });
+
+  it('marks the cookie Secure behind a proxy that forwards HTTPS', async () => {
+    const res = await post({ name: 'Lan', next: '/' }, 'http://localhost/name', {
+      'x-forwarded-proto': 'https',
+    });
+    expect(res.headers.get('set-cookie')).toMatch(/Secure/i);
+  });
+
+  it('does not mark the cookie Secure when the proxy forwards HTTP', async () => {
+    const res = await post({ name: 'Lan', next: '/' }, 'http://localhost/name', {
+      'x-forwarded-proto': 'http',
+    });
+    expect(res.headers.get('set-cookie')).not.toMatch(/Secure/i);
+  });
+
+  it('renders the name input with maxlength', async () => {
+    const html = await (await createApp().request('/name')).text();
+    expect(html).toMatch(
+      new RegExp(`<input[^>]*name="name"[^>]*maxlength="${DISPLAY_NAME_MAX_LENGTH}"`),
+    );
+  });
+
+  it('refuses a name longer than the limit with 400 and creates nothing', async () => {
+    const res = await post({ name: 'a'.repeat(DISPLAY_NAME_MAX_LENGTH + 1), next: '/outings/abc' });
+    expect(res.status).toBe(400);
+    const html = await res.text();
+    expect(html).toContain(`Tên tối đa ${DISPLAY_NAME_MAX_LENGTH} ký tự.`);
+    expect(html).toContain('value="/outings/abc"');
+    expect(res.headers.get('set-cookie')).toBeNull();
+    expect(await count()).toBe(0);
+  });
+
+  it('accepts a name exactly at the limit after trimming', async () => {
+    const res = await post({ name: `  ${'a'.repeat(DISPLAY_NAME_MAX_LENGTH)}  `, next: '/' });
+    expect(res.status).toBe(303);
+    expect(await count()).toBe(1);
+  });
+
+  it('redirects to / when next is not a same-site path', async () => {
+    const res = await post({ name: 'Lan', next: '//evil.com' });
+    expect(res.headers.get('location')).toBe('/');
+  });
+
+  it('gives a second "Lan" without cookie a different participant id', async () => {
+    const a = await post({ name: 'Lan', next: '/' });
+    const b = await post({ name: 'Lan', next: '/' });
+    expect(a.status).toBe(303);
+    expect(b.status).toBe(303);
+    const id = (r: Response) => /dv_pid=([^;]+)/.exec(r.headers.get('set-cookie') ?? '')?.[1];
+    expect(id(a)).toBeTruthy();
+    expect(id(a)).not.toBe(id(b));
+    expect(await count()).toBe(2);
+  });
+});
