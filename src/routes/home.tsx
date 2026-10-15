@@ -9,6 +9,9 @@ home.get('/', (c) =>
       <Layout>
         <h1>Chào mừng bạn</h1>
         <p>Rủ nhau đi nhậu: ai đi, quán nào, mấy giờ.</p>
+        <p>
+          <a href="/venues">Danh sách quán</a>
+        </p>
       </Layout>
     )}`,
   ),
