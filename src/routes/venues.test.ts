@@ -3,6 +3,7 @@ import { createApp } from '../app.js';
 import { closePool } from '../db/pool.js';
 import { resetDb } from '../test/db.js';
 import { asParticipant } from '../test/identity.js';
+import { VENUE_FIELD_MAX_LENGTH } from '../services/venue-rules.js';
 
 type Headers = { Cookie: string };
 
@@ -157,5 +158,54 @@ describe('/venues', () => {
     // The shared layout sets overflow-wrap: anywhere on body; the list must not undo it.
     expect(html).toContain('overflow-wrap: anywhere');
     expect(html).not.toMatch(/white-space:\s*nowrap/);
+  });
+
+  const limitCases = [
+    { field: 'name', max: 100, message: 'Tên quán tối đa 100 ký tự.' },
+    { field: 'address', max: 200, message: 'Địa chỉ tối đa 200 ký tự.' },
+    { field: 'mapsUrl', max: 2048, message: 'Link Google Maps tối đa 2048 ký tự.' },
+    { field: 'notes', max: 500, message: 'Ghi chú tối đa 500 ký tự.' },
+  ] as const;
+  const valueOf = (field: string, length: number) =>
+    field === 'mapsUrl' ? `https://m.example/${'x'.repeat(length - 'https://m.example/'.length)}` : 'q'.repeat(length);
+
+  it.each(limitCases)('rejects a $field longer than $max characters with 400 and stores nothing', async ({ field, max, message }) => {
+    expect(VENUE_FIELD_MAX_LENGTH[field]).toBe(max);
+    const { headers } = await asParticipant('Lan');
+    const fields: Record<string, string> = { name: 'Quán Dài', address: 'Quận 1', mapsUrl: '', notes: '' };
+    fields[field] = valueOf(field, max + 1);
+    const res = await addVenue(headers, fields);
+    expect(res.status).toBe(400);
+    const body = await res.text();
+    expect(body).toContain(message);
+    expect(body).toContain('<title>Danh sách quán · Drink Votes</title>');
+    const html = await venuesPage(headers);
+    expect(html).toContain('Chưa có quán nào.');
+    expect(html).not.toContain(fields[field]);
+  });
+
+  it.each(limitCases)('accepts a $field of exactly $max characters', async ({ field, max }) => {
+    const { headers } = await asParticipant('Lan');
+    const fields: Record<string, string> = { name: 'Quán Vừa', address: 'Quận 1', mapsUrl: '', notes: '' };
+    fields[field] = valueOf(field, max);
+    const res = await addVenue(headers, fields);
+    expect(res.status).toBe(303);
+    expect(await venuesPage(headers)).toContain(fields[field]);
+  });
+
+  it('sets maxlength on every form field', async () => {
+    const { headers } = await asParticipant('Lan');
+    const html = await venuesPage(headers);
+    expect(html).toMatch(/<input[^>]*name="name"[^>]*maxlength="100"/);
+    expect(html).toMatch(/<input[^>]*name="address"[^>]*maxlength="200"/);
+    expect(html).toMatch(/<input[^>]*name="mapsUrl"[^>]*maxlength="2048"/);
+    expect(html).toMatch(/<textarea[^>]*name="notes"[^>]*maxlength="500"/);
+  });
+
+  it('trims surrounding spaces from the address', async () => {
+    const { headers } = await asParticipant('Lan');
+    await addVenue(headers, { name: 'Quán Trim', address: '   9 Hai Bà Trưng   ' });
+    const item = itemFor(await venuesPage(headers), 'Quán Trim');
+    expect(item).toContain('<p class="venue-address">9 Hai Bà Trưng</p>');
   });
 });

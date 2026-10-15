@@ -1,4 +1,5 @@
 import type { Venue } from '../db/venues.js';
+import { VENUE_FIELD_MAX_LENGTH as MAX } from '../services/venue-rules.js';
 import { Layout } from './layout.js';
 
 /**
@@ -42,7 +43,7 @@ function VenueItem({ venue }: { venue: Venue }) {
   );
 }
 
-export function VenuesPage({ venues }: { venues: Venue[] }) {
+export function VenuesPage({ venues, error }: { venues: Venue[]; error?: string }) {
   return (
     <Layout title="Danh sách quán">
       <style dangerouslySetInnerHTML={{ __html: css }} />
@@ -57,15 +58,16 @@ export function VenuesPage({ venues }: { venues: Venue[] }) {
         </ul>
       )}
       <h2>Thêm quán</h2>
+      {error ? <p role="alert">{error}</p> : null}
       <form class="venue-form" method="post" action="/venues">
         <label for="venue-name">Tên quán</label>
-        <input id="venue-name" type="text" name="name" required />
+        <input id="venue-name" type="text" name="name" maxlength={MAX.name} required />
         <label for="venue-address">Địa chỉ</label>
-        <input id="venue-address" type="text" name="address" required />
+        <input id="venue-address" type="text" name="address" maxlength={MAX.address} required />
         <label for="venue-maps">Link Google Maps</label>
-        <input id="venue-maps" type="text" name="mapsUrl" inputmode="url" />
+        <input id="venue-maps" type="text" name="mapsUrl" inputmode="url" maxlength={MAX.mapsUrl} />
         <label for="venue-notes">Ghi chú</label>
-        <textarea id="venue-notes" name="notes" rows={3}></textarea>
+        <textarea id="venue-notes" name="notes" rows={3} maxlength={MAX.notes}></textarea>
         <button type="submit">Thêm quán</button>
       </form>
     </Layout>
