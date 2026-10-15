@@ -85,7 +85,7 @@ describe('GET /outings/:id', () => {
 
   it('does not swallow other /outings paths', async () => {
     const { headers } = await asParticipant('Lan');
-    const res = await createApp().request('/outings/new', { headers });
+    const res = await createApp().request('/outings/other', { headers });
     expect(res.status).toBe(404);
     expect(await res.text()).not.toContain('Không tìm thấy kèo này.');
   });
