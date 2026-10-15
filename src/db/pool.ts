@@ -23,3 +23,8 @@ export async function closePool(): Promise<void> {
   pool = undefined;
   if (current) await current.end();
 }
+
+/** Runs `select 1`; rejects when the database cannot answer. */
+export async function ping(target: pg.Pool): Promise<void> {
+  await target.query('select 1');
+}
