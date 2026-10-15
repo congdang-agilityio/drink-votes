@@ -1,12 +1,14 @@
+import { realpathSync } from 'node:fs';
 import { readdir, readFile } from 'node:fs/promises';
-import { join, resolve } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import type pg from 'pg';
 import { closePool, getPool } from './pool.js';
 
 /**
  * Applies every `*.sql` file in `dir` not yet recorded in `schema_migrations`, in file-name
  * order, each in its own transaction. Returns the names of the files applied by this run.
+ * Migration files must not contain their own BEGIN/COMMIT: the runner wraps each file.
  */
 export async function migrate(pool: pg.Pool, dir = 'migrations'): Promise<string[]> {
   await pool.query(
@@ -24,6 +26,7 @@ export async function migrate(pool: pg.Pool, dir = 'migrations'): Promise<string
     if (done.has(name)) continue;
     const sql = await readFile(join(dir, name), 'utf8');
     const client = await pool.connect();
+    let failure: Error | undefined;
     try {
       await client.query('BEGIN');
       await client.query(sql);
@@ -32,9 +35,11 @@ export async function migrate(pool: pg.Pool, dir = 'migrations'): Promise<string
     } catch (err) {
       await client.query('ROLLBACK').catch(() => undefined);
       const reason = err instanceof Error ? err.message : String(err);
+      failure = err instanceof Error ? err : new Error(reason);
       throw new Error(`Migration ${name} failed: ${reason}`, { cause: err });
     } finally {
-      client.release();
+      // A failed client may hold a broken connection: passing the error makes pg discard it.
+      client.release(failure);
     }
     applied.push(name);
   }
@@ -53,6 +58,16 @@ async function main(): Promise<void> {
   }
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
+/** True when this module is the entry point; real paths so a symlinked argv[1] still matches. */
+function isEntryPoint(): boolean {
+  if (!process.argv[1]) return false;
+  try {
+    return realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url));
+  } catch {
+    return false;
+  }
+}
+
+if (isEntryPoint()) {
   void main();
 }
