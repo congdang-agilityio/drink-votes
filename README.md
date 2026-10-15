@@ -55,6 +55,7 @@ Slack/email, bản đồ, giao diện mobile riêng.
 ```bash
 npm install
 cp .env.example .env        # DATABASE_URL trỏ tới Postgres local
+                            # npm start / npm run migrate also read .env.local if present
 npm run migrate
 npm run dev                 # http://localhost:3000
 npm test
