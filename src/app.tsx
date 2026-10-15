@@ -6,6 +6,7 @@ import { changeName } from './routes/change-name.js';
 import { home } from './routes/home.js';
 import { name } from './routes/name.js';
 import { outing } from './routes/outing.js';
+import { venues } from './routes/venues.js';
 import { NotFound } from './views/not-found.js';
 
 export function createApp(): Hono<IdentityEnv> {
@@ -20,6 +21,7 @@ export function createApp(): Hono<IdentityEnv> {
   app.route('/', home);
   app.route('/', outing);
   app.route('/', changeName);
+  app.route('/', venues);
   app.notFound((c) => c.html(`<!DOCTYPE html>${(<NotFound />)}`, 404));
   return app;
 }
