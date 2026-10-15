@@ -1,8 +1,7 @@
 import { serve } from '@hono/node-server';
 import { createApp } from './app.js';
+import { config } from './config.js';
 
-const port = Number(process.env.PORT ?? 3000);
-
-serve({ fetch: createApp().fetch, port }, (info) => {
+serve({ fetch: createApp().fetch, port: config.port }, (info) => {
   console.log(`Listening on port ${info.port}`);
 });
