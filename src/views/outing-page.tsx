@@ -1,12 +1,9 @@
-import type { Attendance } from "../db/attendance.js";
-import type { Outing } from "../db/outings.js";
-import { formatDate, formatTime } from "../lib/time.js";
-import { Layout } from "./layout.js";
+import type { Attendance } from '../db/attendance.js';
+import type { Outing } from '../db/outings.js';
+import { formatDate, formatTime } from '../lib/time.js';
+import { Layout } from './layout.js';
 
-export type OutingView = Pick<
-  Outing,
-  "id" | "date" | "sitTime" | "closeTime" | "venues"
->;
+export type OutingView = Pick<Outing, 'id' | 'date' | 'sitTime' | 'closeTime' | 'venues'>;
 
 const isHttpUrl = (url: string): boolean => /^https?:\/\//i.test(url);
 
@@ -17,7 +14,7 @@ const answerCss = `
 `;
 
 const myAnswerText = (a: boolean | null): string =>
-  a === null ? "Bạn chưa trả lời" : a ? "Bạn: Đi" : "Bạn: Không đi";
+  a === null ? 'Bạn chưa trả lời' : a ? 'Bạn: Đi' : 'Bạn: Không đi';
 
 export function OutingPage({
   outing,
@@ -60,30 +57,16 @@ export function OutingPage({
       <h2>Bạn có đi không?</h2>
       <style dangerouslySetInnerHTML={{ __html: answerCss }} />
       <p>{myAnswerText(myAnswer)}</p>
-      <form
-        class="answer-form"
-        method="post"
-        action={`/outings/${outing.id}/answer`}
-      >
-        <button
-          type="submit"
-          name="going"
-          value="yes"
-          aria-pressed={myAnswer === true ? "true" : "false"}
-        >
+      <form class="answer-form" method="post" action={`/outings/${outing.id}/answer`}>
+        <button type="submit" name="going" value="yes" aria-pressed={myAnswer === true ? 'true' : 'false'}>
           Đi
         </button>
-        <button
-          type="submit"
-          name="going"
-          value="no"
-          aria-pressed={myAnswer === false ? "true" : "false"}
-        >
+        <button type="submit" name="going" value="no" aria-pressed={myAnswer === false ? 'true' : 'false'}>
           Không đi
         </button>
       </form>
       <h2>Số người đi: {attendance.goingCount}</h2>
-      <ul>
+      <ul class="going-list">
         {attendance.goingNames.map((name) => (
           <li>{name}</li>
         ))}

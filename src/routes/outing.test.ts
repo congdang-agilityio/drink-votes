@@ -1,34 +1,34 @@
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
-import { createApp } from "../app.js";
-import { setAnswer } from "../db/attendance.js";
-import { createOuting } from "../db/outings.js";
-import { closePool } from "../db/pool.js";
-import { createVenue } from "../db/venues.js";
-import { resetDb } from "../test/db.js";
-import { asParticipant } from "../test/identity.js";
+import { afterAll, beforeEach, describe, expect, it } from 'vitest';
+import { createApp } from '../app.js';
+import { setAnswer } from '../db/attendance.js';
+import { createOuting } from '../db/outings.js';
+import { closePool } from '../db/pool.js';
+import { createVenue } from '../db/venues.js';
+import { resetDb } from '../test/db.js';
+import { asParticipant } from '../test/identity.js';
 
-async function seed(organizerId: string, date = "2030-05-17") {
+async function seed(organizerId: string, date = '2030-05-17') {
   const a = await createVenue({
-    name: "Quán Ốc Đào",
-    address: "1 Lê Lợi",
-    mapsUrl: "https://maps.example/a",
+    name: 'Quán Ốc Đào',
+    address: '1 Lê Lợi',
+    mapsUrl: 'https://maps.example/a',
   });
   const b = await createVenue({
-    name: "Bia Hơi Hà Nội",
-    address: "2 Hai Bà Trưng",
-    mapsUrl: "javascript:alert(1)",
+    name: 'Bia Hơi Hà Nội',
+    address: '2 Hai Bà Trưng',
+    mapsUrl: 'javascript:alert(1)',
   });
   const id = await createOuting({
     date,
-    sitTime: "18:30",
-    closeTime: "16:00",
+    sitTime: '18:30',
+    closeTime: '16:00',
     venueIds: [b.id, a.id],
     organizerId,
   });
   return id;
 }
 
-describe("GET /outings/:id", () => {
+describe('GET /outings/:id', () => {
   beforeEach(async () => {
     await resetDb();
   });
@@ -37,149 +37,145 @@ describe("GET /outings/:id", () => {
     await closePool();
   });
 
-  it("renders date, times and venues in the expected formats", async () => {
-    const { participant, headers } = await asParticipant("Lan");
+  it('renders date, times and venues in the expected formats', async () => {
+    const { participant, headers } = await asParticipant('Lan');
     const id = await seed(participant.id);
     const res = await createApp().request(`/outings/${id}`, { headers });
     expect(res.status).toBe(200);
     const html = await res.text();
-    expect(html).toContain("<title>");
-    expect(html).toContain("Ngày");
-    expect(html).toContain("17/05/2030");
-    expect(html).toContain("Giờ ngồi");
-    expect(html).toContain("18:30");
-    expect(html).toContain("Giờ chốt");
-    expect(html).toContain("16:00");
-    expect(html).toContain("2 Hai Bà Trưng");
+    expect(html).toContain('<title>');
+    expect(html).toContain('Ngày');
+    expect(html).toContain('17/05/2030');
+    expect(html).toContain('Giờ ngồi');
+    expect(html).toContain('18:30');
+    expect(html).toContain('Giờ chốt');
+    expect(html).toContain('16:00');
+    expect(html).toContain('2 Hai Bà Trưng');
     expect(html).toContain('href="https://maps.example/a"');
-    expect(html).not.toContain("javascript:");
+    expect(html).not.toContain('javascript:');
   });
 
-  it("lists venues in chosen order", async () => {
-    const { participant, headers } = await asParticipant("Lan");
+  it('lists venues in chosen order', async () => {
+    const { participant, headers } = await asParticipant('Lan');
     const id = await seed(participant.id);
-    const html = await (
-      await createApp().request(`/outings/${id}`, { headers })
-    ).text();
-    expect(html.indexOf("Bia Hơi Hà Nội")).toBeGreaterThan(-1);
-    expect(html.indexOf("Bia Hơi Hà Nội")).toBeLessThan(
-      html.indexOf("Quán Ốc Đào"),
-    );
+    const html = await (await createApp().request(`/outings/${id}`, { headers })).text();
+    expect(html.indexOf('Bia Hơi Hà Nội')).toBeGreaterThan(-1);
+    expect(html.indexOf('Bia Hơi Hà Nội')).toBeLessThan(html.indexOf('Quán Ốc Đào'));
   });
 
-  it("shows the close time of a past outing and no closed wording", async () => {
-    const { participant, headers } = await asParticipant("Lan");
-    const id = await seed(participant.id, "2020-01-02");
-    const html = await (
-      await createApp().request(`/outings/${id}`, { headers })
-    ).text();
-    expect(html).toContain("02/01/2020");
-    expect(html).toContain("Giờ chốt");
-    expect(html).toContain("16:00");
+  it('shows the close time of a past outing and no closed wording', async () => {
+    const { participant, headers } = await asParticipant('Lan');
+    const id = await seed(participant.id, '2020-01-02');
+    const html = await (await createApp().request(`/outings/${id}`, { headers })).text();
+    expect(html).toContain('02/01/2020');
+    expect(html).toContain('Giờ chốt');
+    expect(html).toContain('16:00');
     expect(html).not.toMatch(/đã chốt|đã đóng|closed/i);
   });
 
-  it("returns 404 in the layout for an unknown id", async () => {
-    const { headers } = await asParticipant("Lan");
-    const res = await createApp().request(
-      "/outings/00000000-0000-4000-8000-000000000000",
-      {
-        headers,
-      },
-    );
+  it('returns 404 in the layout for an unknown id', async () => {
+    const { headers } = await asParticipant('Lan');
+    const res = await createApp().request('/outings/00000000-0000-4000-8000-000000000000', {
+      headers,
+    });
     expect(res.status).toBe(404);
     const html = await res.text();
-    expect(html).toContain("Không tìm thấy kèo này.");
-    expect(html).toContain("<header");
+    expect(html).toContain('Không tìm thấy kèo này.');
+    expect(html).toContain('<header');
   });
 
-  it("does not swallow other /outings paths", async () => {
-    const { headers } = await asParticipant("Lan");
-    const res = await createApp().request("/outings/new", { headers });
+  it('does not swallow other /outings paths', async () => {
+    const { headers } = await asParticipant('Lan');
+    const res = await createApp().request('/outings/new', { headers });
     expect(res.status).toBe(404);
-    expect(await res.text()).not.toContain("Không tìm thấy kèo này.");
+    expect(await res.text()).not.toContain('Không tìm thấy kèo này.');
   });
 
-  it("shows the same outing to another browser", async () => {
-    const a = await asParticipant("Lan");
-    const b = await asParticipant("Minh");
+  it('shows the same outing to another browser', async () => {
+    const a = await asParticipant('Lan');
+    const b = await asParticipant('Minh');
     const id = await seed(a.participant.id);
     const html = await (
       await createApp().request(`/outings/${id}`, { headers: b.headers })
     ).text();
-    expect(html).toContain("17/05/2030");
-    expect(html).toContain("Quán Ốc Đào");
+    expect(html).toContain('17/05/2030');
+    expect(html).toContain('Quán Ốc Đào');
   });
 
-  it("sends a browser without a cookie to the name prompt", async () => {
-    const { participant } = await asParticipant("Lan");
+  it('sends a browser without a cookie to the name prompt', async () => {
+    const { participant } = await asParticipant('Lan');
     const id = await seed(participant.id);
     const res = await createApp().request(`/outings/${id}`);
     expect(res.status).toBe(302);
-    expect(res.headers.get("location")).toBe(
-      `/name?next=${encodeURIComponent(`/outings/${id}`)}`,
-    );
+    expect(res.headers.get('location')).toBe(`/name?next=${encodeURIComponent(`/outings/${id}`)}`);
   });
 
-  describe("answer section", () => {
+  describe('answer section', () => {
     const get = async (id: string, headers: Record<string, string>) =>
       (await createApp().request(`/outings/${id}`, { headers })).text();
+    const pressed = (html: string, value: 'yes' | 'no') =>
+      html.match(new RegExp(`<button[^>]*value="${value}"[^>]*aria-pressed="(true|false)"`))?.[1];
+    const goingList = (html: string) =>
+      html.match(/<ul class="going-list">([\s\S]*?)<\/ul>/)?.[1];
 
-    it("shows both buttons posting to the answer endpoint, and the organizer unanswered with 0 going", async () => {
-      const { participant, headers } = await asParticipant("Lan");
+    it('shows both buttons posting to the answer endpoint, and the organizer unanswered with 0 going', async () => {
+      const { participant, headers } = await asParticipant('Lan');
       const id = await seed(participant.id);
       const html = await get(id, headers);
       expect(html).toContain(`action="/outings/${id}/answer"`);
-      expect(html).toContain('value="yes"');
-      expect(html).toContain('value="no"');
-      expect(html).toContain("Đi");
-      expect(html).toContain("Không đi");
-      expect(html).toContain("Bạn chưa trả lời");
-      expect(html).toContain("Số người đi: 0");
+      expect(html).toContain('Đi');
+      expect(html).toContain('Không đi');
+      expect(pressed(html, 'yes')).toBe('false');
+      expect(pressed(html, 'no')).toBe('false');
+      expect(html).toContain('Bạn chưa trả lời');
+      expect(html).toContain('Số người đi: 0');
+      expect(goingList(html)).toBe('');
     });
 
-    it("lists a Going person, counts them and marks the chosen button", async () => {
-      const lan = await asParticipant("Lan");
-      const minh = await asParticipant("Minh");
+    it('lists a Going person, counts them and marks the chosen button', async () => {
+      const lan = await asParticipant('Lan');
+      const minh = await asParticipant('Minh');
       const id = await seed(lan.participant.id);
       await setAnswer(id, lan.participant.id, true);
       await setAnswer(id, minh.participant.id, false);
       const html = await get(id, lan.headers);
-      expect(html).toContain("Bạn: Đi");
-      expect(html).toContain('aria-pressed="true"');
-      expect(html).toContain("Số người đi: 1");
-      expect(html).toContain("<li>Lan</li>");
-      expect(html).not.toContain("Minh");
+      expect(html).toContain('Bạn: Đi');
+      expect(pressed(html, 'yes')).toBe('true');
+      expect(pressed(html, 'no')).toBe('false');
+      expect(html).toContain('Số người đi: 1');
+      expect(goingList(html)).toBe('<li>Lan</li>');
+      expect(html).not.toContain('Minh');
       const minhHtml = await get(id, minh.headers);
-      expect(minhHtml).toContain("Bạn: Không đi");
-      expect(minhHtml).toContain("Số người đi: 1");
-      expect(minhHtml).toContain("<li>Lan</li>");
-      expect(minhHtml).not.toContain("<li>Minh</li>");
+      expect(minhHtml).toContain('Bạn: Không đi');
+      expect(pressed(minhHtml, 'yes')).toBe('false');
+      expect(pressed(minhHtml, 'no')).toBe('true');
+      expect(minhHtml).toContain('Số người đi: 1');
+      expect(goingList(minhHtml)).toBe('<li>Lan</li>');
     });
 
-    it("follows answer changes after the close time passed", async () => {
-      const lan = await asParticipant("Lan");
-      const id = await seed(lan.participant.id, "2020-01-02");
+    it('follows answer changes after the close time passed', async () => {
+      const lan = await asParticipant('Lan');
+      const id = await seed(lan.participant.id, '2020-01-02');
       await setAnswer(id, lan.participant.id, true);
-      expect(await get(id, lan.headers)).toContain("Số người đi: 1");
+      expect(await get(id, lan.headers)).toContain('Số người đi: 1');
       await setAnswer(id, lan.participant.id, false);
       const off = await get(id, lan.headers);
-      expect(off).toContain("Số người đi: 0");
-      expect(off).toContain("Bạn: Không đi");
-      expect(off).not.toContain("<li>Lan</li>");
+      expect(off).toContain('Số người đi: 0');
+      expect(off).toContain('Bạn: Không đi');
+      expect(goingList(off)).toBe('');
       await setAnswer(id, lan.participant.id, true);
-      expect(await get(id, lan.headers)).toContain("<li>Lan</li>");
+      expect(goingList(await get(id, lan.headers))).toBe('<li>Lan</li>');
     });
 
-    it("lists two different people named Lan twice", async () => {
-      const a = await asParticipant("Lan");
-      const b = await asParticipant("Lan");
+    it('lists two different people named Lan twice', async () => {
+      const a = await asParticipant('Lan');
+      const b = await asParticipant('Lan');
       const id = await seed(a.participant.id);
       await setAnswer(id, a.participant.id, true);
       await setAnswer(id, b.participant.id, true);
       const html = await get(id, a.headers);
-      expect(html).toContain("Số người đi: 2");
-      expect(html.match(/<li>Lan<\/li>/g)).toHaveLength(2);
+      expect(html).toContain('Số người đi: 2');
+      expect(goingList(html)).toBe('<li>Lan</li><li>Lan</li>');
     });
   });
 });
