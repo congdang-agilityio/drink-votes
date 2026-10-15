@@ -36,3 +36,11 @@ export async function findParticipant(id: string): Promise<Participant | null> {
   );
   return rows[0] ? toParticipant(rows[0]) : null;
 }
+
+/** Changes the display name of one participant; the id (and so every answer and vote) stays. */
+export async function renameParticipant(id: string, displayName: string): Promise<void> {
+  await getPool().query('UPDATE participants SET display_name = $2 WHERE id = $1', [
+    id,
+    displayName,
+  ]);
+}

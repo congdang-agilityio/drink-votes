@@ -1,6 +1,6 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { resetDb } from '../test/db.js';
-import { createParticipant, findParticipant } from './participants.js';
+import { createParticipant, findParticipant, renameParticipant } from './participants.js';
 import { closePool, getPool } from './pool.js';
 
 describe('participants store', () => {
@@ -25,6 +25,14 @@ describe('participants store', () => {
     expect(a.id).not.toBe(b.id);
     expect((await findParticipant(a.id))?.displayName).toBe('Lan');
     expect((await findParticipant(b.id))?.displayName).toBe('Lan');
+  });
+
+  it('renames only that participant, keeping the id', async () => {
+    const a = await createParticipant('Lan');
+    const b = await createParticipant('Lan');
+    await renameParticipant(a.id, 'Lan Anh');
+    expect(await findParticipant(a.id)).toEqual({ id: a.id, displayName: 'Lan Anh' });
+    expect(await findParticipant(b.id)).toEqual({ id: b.id, displayName: 'Lan' });
   });
 
   it('returns null for an unknown id', async () => {

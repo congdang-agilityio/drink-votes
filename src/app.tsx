@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { identity, type IdentityEnv } from './middleware/identity.js';
 import { healthRoute } from './routes/health.js';
+import { changeName } from './routes/change-name.js';
 import { home } from './routes/home.js';
 import { name } from './routes/name.js';
 import { outing } from './routes/outing.js';
@@ -15,6 +16,7 @@ export function createApp(): Hono<IdentityEnv> {
   app.use('*', identity);
   app.route('/', home);
   app.route('/', outing);
+  app.route('/', changeName);
   app.notFound((c) => c.html(`<!DOCTYPE html>${(<NotFound />)}`, 404));
   return app;
 }
