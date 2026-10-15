@@ -14,6 +14,16 @@ export function identityCookieOptions(secure: boolean) {
   };
 }
 
+/**
+ * Whether the user's request is HTTPS: the URL scheme, or the first `X-Forwarded-Proto`
+ * value set by a TLS-terminating proxy (Railway forwards plain HTTP to the app).
+ */
+export function isHttpsRequest(url: string, forwardedProto: string | undefined): boolean {
+  if (new URL(url).protocol === 'https:') return true;
+  const first = forwardedProto?.split(',')[0]?.trim().toLowerCase();
+  return first === 'https';
+}
+
 /** A same-site path to redirect to: starts with a single `/`; anything else becomes `/`. */
 export function safeNext(next: unknown): string {
   if (typeof next !== 'string') return '/';

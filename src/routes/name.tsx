@@ -1,8 +1,13 @@
 import { Hono } from 'hono';
 import { setCookie } from 'hono/cookie';
 import { createParticipant } from '../db/participants.js';
-import { normalizeDisplayName } from '../lib/display-name.js';
-import { identityCookieOptions, PARTICIPANT_COOKIE, safeNext } from '../lib/identity.js';
+import { DISPLAY_NAME_MAX_LENGTH, normalizeDisplayName } from '../lib/display-name.js';
+import {
+  identityCookieOptions,
+  isHttpsRequest,
+  PARTICIPANT_COOKIE,
+  safeNext,
+} from '../lib/identity.js';
 import { Layout } from '../views/layout.js';
 
 export const name = new Hono();
@@ -17,7 +22,14 @@ function NameForm({ next, error }: { next: string; error?: string }) {
         <p>
           <label for="display-name">Tên hiển thị</label>
           <br />
-          <input id="display-name" type="text" name="name" autocomplete="nickname" required />
+          <input
+            id="display-name"
+            type="text"
+            name="name"
+            maxlength={DISPLAY_NAME_MAX_LENGTH}
+            autocomplete="nickname"
+            required
+          />
         </p>
         <button type="submit">Tiếp tục</button>
       </form>
@@ -37,8 +49,11 @@ name.post('/name', async (c) => {
   if (!displayName) {
     return c.html(page(next, 'Vui lòng nhập tên của bạn.'), 400);
   }
+  if (displayName.length > DISPLAY_NAME_MAX_LENGTH) {
+    return c.html(page(next, `Tên tối đa ${DISPLAY_NAME_MAX_LENGTH} ký tự.`), 400);
+  }
   const participant = await createParticipant(displayName);
-  const secure = new URL(c.req.url).protocol === 'https:';
+  const secure = isHttpsRequest(c.req.url, c.req.header('x-forwarded-proto'));
   setCookie(c, PARTICIPANT_COOKIE, participant.id, identityCookieOptions(secure));
   return c.redirect(next, 303);
 });

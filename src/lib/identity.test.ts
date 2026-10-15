@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { safeNext } from './identity.js';
+import { isHttpsRequest, safeNext } from './identity.js';
 
 describe('safeNext', () => {
   it('accepts same-site paths', () => {
@@ -20,4 +20,24 @@ describe('safeNext', () => {
     expect(safeNext(null)).toBe('/');
     expect(safeNext(['/a'])).toBe('/');
   });
+});
+
+describe('isHttpsRequest', () => {
+  it('is true for an https URL', () => {
+    expect(isHttpsRequest('https://example.com/name', undefined)).toBe(true);
+  });
+
+  it.each(['https', 'HTTPS', ' https ', 'https,http'])(
+    'is true for http URL with x-forwarded-proto %j',
+    (proto) => {
+      expect(isHttpsRequest('http://localhost/name', proto)).toBe(true);
+    },
+  );
+
+  it.each([undefined, '', 'http', 'http,https'])(
+    'is false for http URL with x-forwarded-proto %j',
+    (proto) => {
+      expect(isHttpsRequest('http://localhost/name', proto)).toBe(false);
+    },
+  );
 });

@@ -1,12 +1,17 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { createApp } from '../app.js';
 import { closePool, getPool } from '../db/pool.js';
+import { DISPLAY_NAME_MAX_LENGTH } from '../lib/display-name.js';
 import { resetDb } from '../test/db.js';
 
-const post = (fields: Record<string, string>, url = 'http://localhost/name') =>
+const post = (
+  fields: Record<string, string>,
+  url = 'http://localhost/name',
+  headers: Record<string, string> = {},
+) =>
   createApp().request(url, {
     method: 'POST',
-    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    headers: { 'content-type': 'application/x-www-form-urlencoded', ...headers },
     body: new URLSearchParams(fields).toString(),
   });
 
@@ -62,6 +67,43 @@ describe('/name', () => {
   it('marks the cookie Secure on HTTPS', async () => {
     const res = await post({ name: 'Lan', next: '/' }, 'https://localhost/name');
     expect(res.headers.get('set-cookie')).toMatch(/Secure/i);
+  });
+
+  it('marks the cookie Secure behind a proxy that forwards HTTPS', async () => {
+    const res = await post({ name: 'Lan', next: '/' }, 'http://localhost/name', {
+      'x-forwarded-proto': 'https',
+    });
+    expect(res.headers.get('set-cookie')).toMatch(/Secure/i);
+  });
+
+  it('does not mark the cookie Secure when the proxy forwards HTTP', async () => {
+    const res = await post({ name: 'Lan', next: '/' }, 'http://localhost/name', {
+      'x-forwarded-proto': 'http',
+    });
+    expect(res.headers.get('set-cookie')).not.toMatch(/Secure/i);
+  });
+
+  it('renders the name input with maxlength', async () => {
+    const html = await (await createApp().request('/name')).text();
+    expect(html).toMatch(
+      new RegExp(`<input[^>]*name="name"[^>]*maxlength="${DISPLAY_NAME_MAX_LENGTH}"`),
+    );
+  });
+
+  it('refuses a name longer than the limit with 400 and creates nothing', async () => {
+    const res = await post({ name: 'a'.repeat(DISPLAY_NAME_MAX_LENGTH + 1), next: '/outings/abc' });
+    expect(res.status).toBe(400);
+    const html = await res.text();
+    expect(html).toContain(`Tên tối đa ${DISPLAY_NAME_MAX_LENGTH} ký tự.`);
+    expect(html).toContain('value="/outings/abc"');
+    expect(res.headers.get('set-cookie')).toBeNull();
+    expect(await count()).toBe(0);
+  });
+
+  it('accepts a name exactly at the limit after trimming', async () => {
+    const res = await post({ name: `  ${'a'.repeat(DISPLAY_NAME_MAX_LENGTH)}  `, next: '/' });
+    expect(res.status).toBe(303);
+    expect(await count()).toBe(1);
   });
 
   it('redirects to / when next is not a same-site path', async () => {
