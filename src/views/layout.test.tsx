@@ -22,4 +22,9 @@ describe('Layout', () => {
     expect(html).toContain('overflow-wrap: anywhere');
     expect(html).toContain('max-width: 100%');
   });
+
+  it('shows no name when rendered outside a request', async () => {
+    const html = String(await (<Layout><p>x</p></Layout>));
+    expect(html).not.toContain('/me/name');
+  });
 });

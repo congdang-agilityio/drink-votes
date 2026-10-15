@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { contextStorage } from 'hono/context-storage';
 import { identity, type IdentityEnv } from './middleware/identity.js';
 import { healthRoute } from './routes/health.js';
 import { changeName } from './routes/change-name.js';
@@ -9,7 +10,9 @@ import { NotFound } from './views/not-found.js';
 
 export function createApp(): Hono<IdentityEnv> {
   const app = new Hono<IdentityEnv>();
-  // First, before any page middleware: the health check must never be redirected.
+  // Lets views read the request (the header shows the viewer's name).
+  app.use('*', contextStorage());
+  // Before any page middleware: the health check must never be redirected.
   app.route('/', healthRoute());
   app.route('/', name);
   // Every page below needs a known participant (c.var.participant).
