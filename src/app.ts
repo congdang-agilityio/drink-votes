@@ -1,5 +1,8 @@
 import { Hono } from 'hono';
+import { home } from './routes/home.js';
 
 export function createApp(): Hono {
-  return new Hono();
+  const app = new Hono();
+  app.route('/', home);
+  return app;
 }
