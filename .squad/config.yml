@@ -46,7 +46,7 @@ parallel:
   claim_ttl_minutes: 120          # a claim older than this (crashed machine) is reported as stale
   max_open_prs: 4
   max_agents: 3                   # subagents dispatched at once by the run loop (memory)
-  port_base: 4100
+  port_base: 4300
   test_db_prefix: app_test
   database_url_template: "postgresql://postgres:postgres@localhost:55434/{db}"       # e.g. postgresql://postgres:postgres@localhost:5432/{db}
 models:                           # model per dispatch (haiku | sonnet | opus); missing = the agent's
