@@ -53,8 +53,6 @@ describe('/venues', () => {
     for (const label of ['Tên quán', 'Địa chỉ', 'Link Google Maps', 'Ghi chú']) {
       expect(html).toContain(`>${label}</label>`);
     }
-    expect(html).toMatch(/<input[^>]*name="name"[^>]*required/);
-    expect(html).toMatch(/<input[^>]*name="address"[^>]*required/);
     expect(html).toMatch(/<input[^>]*name="mapsUrl"/);
     expect(html).toMatch(/<textarea[^>]*name="notes"/);
     expect(html).toContain('Chưa có quán nào.');
@@ -207,5 +205,80 @@ describe('/venues', () => {
     await addVenue(headers, { name: 'Quán Trim', address: '   9 Hai Bà Trưng   ' });
     const item = itemFor(await venuesPage(headers), 'Quán Trim');
     expect(item).toContain('<p class="venue-address">9 Hai Bà Trưng</p>');
+  });
+
+  describe('refusing incomplete and duplicate venues', () => {
+    const rowCount = (html: string) => (html.match(/<li class="venue">/g) ?? []).length;
+
+    it('refuses a missing name with 400, the name message and the other values kept', async () => {
+      const { headers } = await asParticipant('Lan');
+      const res = await addVenue(headers, { address: 'Quận 1', mapsUrl: 'https://m.example/x', notes: 'ghi chú' });
+      expect(res.status).toBe(400);
+      const body = await res.text();
+      expect(body).toContain('Vui lòng nhập tên quán.');
+      expect(body).not.toContain('Vui lòng nhập địa chỉ.');
+      expect(body).toMatch(/<input[^>]*name="address"[^>]*value="Quận 1"/);
+      expect(body).toMatch(/<input[^>]*name="mapsUrl"[^>]*value="https:\/\/m\.example\/x"/);
+      expect(body).toMatch(/<textarea[^>]*name="notes"[^>]*>ghi chú<\/textarea>/);
+      expect(await venuesPage(headers)).toContain('Chưa có quán nào.');
+    });
+
+    it('refuses a missing address with 400 and the address message', async () => {
+      const { headers } = await asParticipant('Lan');
+      const res = await addVenue(headers, { name: 'Quán Ốc Đào' });
+      expect(res.status).toBe(400);
+      const body = await res.text();
+      expect(body).toContain('Vui lòng nhập địa chỉ.');
+      expect(body).toMatch(/<input[^>]*name="name"[^>]*value="Quán Ốc Đào"/);
+      expect(await venuesPage(headers)).toContain('Chưa có quán nào.');
+    });
+
+    it('treats a blank name as missing', async () => {
+      const { headers } = await asParticipant('Lan');
+      const res = await addVenue(headers, { name: '   ', address: 'Quận 1' });
+      expect(res.status).toBe(400);
+      expect(await res.text()).toContain('Vui lòng nhập tên quán.');
+      expect(await venuesPage(headers)).toContain('Chưa có quán nào.');
+    });
+
+    it('refuses a duplicate name ignoring case and keeps the entered values', async () => {
+      const { headers } = await asParticipant('Lan');
+      await addVenue(headers, { name: 'Quán Ốc Đào', address: 'Quận 1' });
+      const res = await addVenue(headers, { name: 'quán ốc đào', address: 'Quận 5', notes: 'khác' });
+      expect(res.status).toBe(409);
+      const body = await res.text();
+      expect(body).toContain('Đã có quán với tên này.');
+      expect(body).toMatch(/<input[^>]*name="name"[^>]*value="quán ốc đào"/);
+      expect(body).toMatch(/<input[^>]*name="address"[^>]*value="Quận 5"/);
+      const html = await venuesPage(headers);
+      expect(rowCount(html)).toBe(1);
+      expect(html).toContain('Quán Ốc Đào');
+    });
+
+    it('stores a non-link Maps link as typed and shows it as plain text', async () => {
+      const { headers } = await asParticipant('Lan');
+      const res = await addVenue(headers, { name: 'Quán A', address: 'Quận 1', mapsUrl: 'not a link' });
+      expect(res.status).toBe(303);
+      const item = itemFor(await venuesPage(headers), 'Quán A');
+      expect(item).toContain('not a link');
+      expect(item).not.toMatch(/href=/);
+    });
+
+    it('escapes re-rendered values and keeps them on a length error', async () => {
+      const { headers } = await asParticipant('Lan');
+      const res = await addVenue(headers, { name: '"><script>x</script>', address: '' });
+      const body = await res.text();
+      expect(body).not.toContain('<script>x');
+      expect(body).toContain('value="&quot;&gt;&lt;script&gt;x&lt;/script&gt;"');
+      const long = await addVenue(headers, { name: 'Quán Dài', address: 'a'.repeat(201) });
+      expect(await long.text()).toMatch(/<input[^>]*name="name"[^>]*value="Quán Dài"/);
+    });
+
+    it('turns off native browser validation on the form', async () => {
+      const { headers } = await asParticipant('Lan');
+      const html = await venuesPage(headers);
+      expect(html).toMatch(/<form[^>]*\bnovalidate\b/);
+      expect(html).not.toMatch(/<input[^>]*name="name"[^>]*required/);
+    });
   });
 });

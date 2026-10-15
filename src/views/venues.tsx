@@ -43,7 +43,28 @@ function VenueItem({ venue }: { venue: Venue }) {
   );
 }
 
-export function VenuesPage({ venues, error }: { venues: Venue[]; error?: string }) {
+export interface VenueFormValues {
+  name: string;
+  address: string;
+  mapsUrl: string;
+  notes: string;
+}
+
+export interface VenueFormErrors {
+  name?: string;
+  address?: string;
+  general?: string;
+}
+
+export function VenuesPage({
+  venues,
+  values,
+  errors = {},
+}: {
+  venues: Venue[];
+  values?: VenueFormValues;
+  errors?: VenueFormErrors;
+}) {
   return (
     <Layout title="Danh sách quán">
       <style dangerouslySetInnerHTML={{ __html: css }} />
@@ -58,16 +79,18 @@ export function VenuesPage({ venues, error }: { venues: Venue[]; error?: string 
         </ul>
       )}
       <h2>Thêm quán</h2>
-      {error ? <p role="alert">{error}</p> : null}
-      <form class="venue-form" method="post" action="/venues">
+      {errors.general ? <p role="alert">{errors.general}</p> : null}
+      <form class="venue-form" method="post" action="/venues" novalidate>
         <label for="venue-name">Tên quán</label>
-        <input id="venue-name" type="text" name="name" maxlength={MAX.name} required />
+        <input id="venue-name" type="text" name="name" maxlength={MAX.name} value={values?.name ?? ''} />
+        {errors.name ? <p class="field-error" role="alert">{errors.name}</p> : null}
         <label for="venue-address">Địa chỉ</label>
-        <input id="venue-address" type="text" name="address" maxlength={MAX.address} required />
+        <input id="venue-address" type="text" name="address" maxlength={MAX.address} value={values?.address ?? ''} />
+        {errors.address ? <p class="field-error" role="alert">{errors.address}</p> : null}
         <label for="venue-maps">Link Google Maps</label>
-        <input id="venue-maps" type="text" name="mapsUrl" inputmode="url" maxlength={MAX.mapsUrl} />
+        <input id="venue-maps" type="text" name="mapsUrl" inputmode="url" maxlength={MAX.mapsUrl} value={values?.mapsUrl ?? ''} />
         <label for="venue-notes">Ghi chú</label>
-        <textarea id="venue-notes" name="notes" rows={3} maxlength={MAX.notes}></textarea>
+        <textarea id="venue-notes" name="notes" rows={3} maxlength={MAX.notes}>{values?.notes ?? ''}</textarea>
         <button type="submit">Thêm quán</button>
       </form>
     </Layout>
