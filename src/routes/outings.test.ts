@@ -86,6 +86,28 @@ describe('create outing', () => {
     expect(rows[0].organizer_id).toBe(participant.id);
   });
 
+  it('ignores a duplicated venue id instead of failing', async () => {
+    const { headers } = await asParticipant();
+    const a = await createVenue({ name: 'Quán A', address: '1 A' });
+    const b = await createVenue({ name: 'Quán B', address: '2 B' });
+    const res = await post(
+      headers,
+      new URLSearchParams([
+        ['date', todayIn()],
+        ['sitTime', '18:30'],
+        ['closeTime', '16:00'],
+        ['venueIds', a.id],
+        ['venueIds', a.id],
+        ['venueIds', b.id],
+      ]),
+    );
+    expect(res.status).toBe(303);
+    const { rows } = await getPool().query(
+      'SELECT venue_id FROM outing_venues ORDER BY position',
+    );
+    expect(rows.map((r) => r.venue_id)).toEqual([a.id, b.id]);
+  });
+
   it('rejects a malformed date with 400 and creates nothing', async () => {
     const { headers } = await asParticipant();
     const a = await createVenue({ name: 'Quán A', address: '1 A' });

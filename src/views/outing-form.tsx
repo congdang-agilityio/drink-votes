@@ -8,6 +8,14 @@ export interface OutingFormValues {
   venueIds: string[];
 }
 
+/** Messages to show: `form` for the whole form, the others next to their field. */
+export interface OutingFormErrors {
+  form?: string;
+  date?: string;
+  closeTime?: string;
+  venues?: string;
+}
+
 const css = `
 .outing-form label { display: block; font-weight: 600; margin-top: 0.75rem; }
 .outing-form input[type="date"], .outing-form input[type="time"] { width: 100%; padding: 0.5rem; }
@@ -16,30 +24,33 @@ const css = `
 .outing-form button { margin-top: 1rem; padding: 0.5rem 1rem; }
 `;
 
-/** Form to create an outing; `values` and `error` let a failed post re-render it. */
+/** Form to create an outing; `values` and `errors` let a failed post re-render it. */
 export function OutingForm({
   venues,
   values,
-  error,
+  errors = {},
 }: {
   venues: Venue[];
   values: OutingFormValues;
-  error?: string;
+  errors?: OutingFormErrors;
 }) {
   return (
     <Layout title="Tạo kèo">
       <style dangerouslySetInnerHTML={{ __html: css }} />
       <h1>Tạo kèo</h1>
-      {error ? <p role="alert">{error}</p> : null}
+      {errors.form ? <p role="alert">{errors.form}</p> : null}
       <form class="outing-form" method="post" action="/outings">
         <label for="outing-date">Ngày</label>
         <input id="outing-date" type="date" name="date" value={values.date} required />
+        {errors.date ? <p role="alert">{errors.date}</p> : null}
         <label for="outing-sit">Giờ ngồi</label>
         <input id="outing-sit" type="time" name="sitTime" value={values.sitTime} required />
         <label for="outing-close">Giờ chốt</label>
         <input id="outing-close" type="time" name="closeTime" value={values.closeTime} required />
+        {errors.closeTime ? <p role="alert">{errors.closeTime}</p> : null}
         <fieldset>
           <legend>Quán</legend>
+          {errors.venues ? <p role="alert">{errors.venues}</p> : null}
           {venues.length === 0 ? <p>Chưa có quán nào.</p> : null}
           {venues.map((venue) => (
             <label>
