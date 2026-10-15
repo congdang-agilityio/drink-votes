@@ -1,9 +1,21 @@
-import { describe, expect, it } from 'vitest';
+import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { createApp } from '../app.js';
+import { closePool } from '../db/pool.js';
+import { resetDb } from '../test/db.js';
+import { asParticipant } from '../test/identity.js';
 
 describe('GET /', () => {
+  beforeEach(async () => {
+    await resetDb();
+  });
+
+  afterAll(async () => {
+    await closePool();
+  });
+
   it('serves the Vietnamese home page', async () => {
-    const res = await createApp().request('/');
+    const { headers } = await asParticipant('Lan');
+    const res = await createApp().request('/', { headers });
     expect(res.status).toBe(200);
     expect(res.headers.get('content-type')).toContain('text/html');
     const html = await res.text();
