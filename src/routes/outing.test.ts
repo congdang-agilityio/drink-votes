@@ -1,5 +1,6 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { createApp } from '../app.js';
+import { setAnswer } from '../db/attendance.js';
 import { createOuting } from '../db/outings.js';
 import { closePool } from '../db/pool.js';
 import { createVenue } from '../db/venues.js';
@@ -107,5 +108,74 @@ describe('GET /outings/:id', () => {
     const res = await createApp().request(`/outings/${id}`);
     expect(res.status).toBe(302);
     expect(res.headers.get('location')).toBe(`/name?next=${encodeURIComponent(`/outings/${id}`)}`);
+  });
+
+  describe('answer section', () => {
+    const get = async (id: string, headers: Record<string, string>) =>
+      (await createApp().request(`/outings/${id}`, { headers })).text();
+    const pressed = (html: string, value: 'yes' | 'no') =>
+      html.match(new RegExp(`<button[^>]*value="${value}"[^>]*aria-pressed="(true|false)"`))?.[1];
+    const goingList = (html: string) =>
+      html.match(/<ul class="going-list">([\s\S]*?)<\/ul>/)?.[1];
+
+    it('shows both buttons posting to the answer endpoint, and the organizer unanswered with 0 going', async () => {
+      const { participant, headers } = await asParticipant('Lan');
+      const id = await seed(participant.id);
+      const html = await get(id, headers);
+      expect(html).toContain(`action="/outings/${id}/answer"`);
+      expect(html).toContain('Đi');
+      expect(html).toContain('Không đi');
+      expect(pressed(html, 'yes')).toBe('false');
+      expect(pressed(html, 'no')).toBe('false');
+      expect(html).toContain('Bạn chưa trả lời');
+      expect(html).toContain('Số người đi: 0');
+      expect(goingList(html)).toBe('');
+    });
+
+    it('lists a Going person, counts them and marks the chosen button', async () => {
+      const lan = await asParticipant('Lan');
+      const minh = await asParticipant('Minh');
+      const id = await seed(lan.participant.id);
+      await setAnswer(id, lan.participant.id, true);
+      await setAnswer(id, minh.participant.id, false);
+      const html = await get(id, lan.headers);
+      expect(html).toContain('Bạn: Đi');
+      expect(pressed(html, 'yes')).toBe('true');
+      expect(pressed(html, 'no')).toBe('false');
+      expect(html).toContain('Số người đi: 1');
+      expect(goingList(html)).toBe('<li>Lan</li>');
+      expect(html).not.toContain('Minh');
+      const minhHtml = await get(id, minh.headers);
+      expect(minhHtml).toContain('Bạn: Không đi');
+      expect(pressed(minhHtml, 'yes')).toBe('false');
+      expect(pressed(minhHtml, 'no')).toBe('true');
+      expect(minhHtml).toContain('Số người đi: 1');
+      expect(goingList(minhHtml)).toBe('<li>Lan</li>');
+    });
+
+    it('follows answer changes after the close time passed', async () => {
+      const lan = await asParticipant('Lan');
+      const id = await seed(lan.participant.id, '2020-01-02');
+      await setAnswer(id, lan.participant.id, true);
+      expect(await get(id, lan.headers)).toContain('Số người đi: 1');
+      await setAnswer(id, lan.participant.id, false);
+      const off = await get(id, lan.headers);
+      expect(off).toContain('Số người đi: 0');
+      expect(off).toContain('Bạn: Không đi');
+      expect(goingList(off)).toBe('');
+      await setAnswer(id, lan.participant.id, true);
+      expect(goingList(await get(id, lan.headers))).toBe('<li>Lan</li>');
+    });
+
+    it('lists two different people named Lan twice', async () => {
+      const a = await asParticipant('Lan');
+      const b = await asParticipant('Lan');
+      const id = await seed(a.participant.id);
+      await setAnswer(id, a.participant.id, true);
+      await setAnswer(id, b.participant.id, true);
+      const html = await get(id, a.headers);
+      expect(html).toContain('Số người đi: 2');
+      expect(goingList(html)).toBe('<li>Lan</li><li>Lan</li>');
+    });
   });
 });
