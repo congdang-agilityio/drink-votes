@@ -23,8 +23,8 @@ describe('GET /', () => {
     expect(res.headers.get('content-type')).toContain('text/html');
     const html = await res.text();
     expect(html).toContain('<!DOCTYPE html>');
-    expect(html).toContain('<title>Drink Votes</title>');
-    expect(html).toMatch(/<header[^>]*>[\s\S]*Drink Votes[\s\S]*<\/header>/);
+    expect(html).toContain('<title>Drink Tonight</title>');
+    expect(html).toMatch(/<header[^>]*>[\s\S]*Drink Tonight[\s\S]*<\/header>/);
     expect(html).toContain('Rủ nhau đi nhậu: ai đi, quán nào, mấy giờ.');
     expect(html).toContain('name="viewport"');
     expect(html).not.toMatch(/<form|type="password"|login|đăng nhập/i);
@@ -65,7 +65,7 @@ describe('GET /', () => {
   it('shows no name on the name prompt without a cookie', async () => {
     const html = await (await createApp().request('/name')).text();
     expect(html).not.toContain('/me/name');
-    expect(html).toMatch(/<header[^>]*>[\s\S]*Drink Votes[\s\S]*<\/header>/);
+    expect(html).toMatch(/<header[^>]*>[\s\S]*Drink Tonight[\s\S]*<\/header>/);
   });
   describe('upcoming outings', () => {
     let venueId: string;
