@@ -3,6 +3,7 @@ import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type pg from 'pg';
+import { closeDueOutings, type CloseOptions } from '../services/closing.js';
 import { closePool, getPool } from './pool.js';
 
 /**
@@ -46,10 +47,30 @@ export async function migrate(pool: pg.Pool, dir = 'migrations'): Promise<string
   return applied;
 }
 
+/**
+ * The release (pre-deploy) step: applies pending migrations on the shared pool, then closes
+ * every open outing already past its close time with the M2 rules, so outings created before
+ * M2 get a result before anyone opens the app. Closing is final and skips closed outings, so a
+ * second run closes nothing. Nothing is closed when a migration fails.
+ */
+export async function runReleaseStep({
+  log = () => undefined,
+  ...closeOptions
+}: CloseOptions & { log?: (line: string) => void } = {}): Promise<{
+  applied: string[];
+  closed: string[];
+}> {
+  const applied = await migrate(getPool());
+  // Logged before closing so a failing close still shows which migrations were applied.
+  log(applied.length ? `Applied: ${applied.join(', ')}` : 'No new migrations.');
+  const closed = await closeDueOutings(closeOptions);
+  log(`Closed ${closed.length} past-due outing${closed.length === 1 ? '' : 's'}.`);
+  return { applied, closed };
+}
+
 async function main(): Promise<void> {
   try {
-    const applied = await migrate(getPool());
-    console.log(applied.length ? `Applied: ${applied.join(', ')}` : 'No new migrations.');
+    await runReleaseStep({ log: (line) => console.log(line) });
   } catch (err) {
     console.error(err instanceof Error ? err.message : err);
     process.exitCode = 1;
