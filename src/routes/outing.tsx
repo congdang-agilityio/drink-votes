@@ -4,6 +4,7 @@ import { getOuting } from '../db/outings.js';
 import { getVote, getVoteCounts } from '../db/votes.js';
 import type { IdentityEnv } from '../middleware/identity.js';
 import { answer } from './answer.js';
+import { organizer } from './organizer.js';
 import { vote } from './vote.js';
 import { leadingVenues } from '../services/leading.js';
 import { CancelledOutingPage } from '../views/cancelled-outing.js';
@@ -13,6 +14,7 @@ import { OutingNotFound, OutingPage } from '../views/outing-page.js';
 export const outing = new Hono<IdentityEnv>();
 outing.route('/', answer);
 outing.route('/', vote);
+outing.route('/', organizer);
 
 outing.get('/outings/:id{[0-9a-f-]{36}}', async (c) => {
   const found = await getOuting(c.req.param('id'));
