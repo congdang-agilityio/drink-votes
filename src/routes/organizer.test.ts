@@ -1,4 +1,4 @@
-import { afterAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../app.js';
 import { setAnswer } from '../db/attendance.js';
 import { createOuting, getOuting } from '../db/outings.js';
@@ -251,6 +251,155 @@ describe('POST /outings/:id/choose', () => {
   it('returns 404 for an unknown outing', async () => {
     const org = await asParticipant('Minh');
     const res = await choose(UNKNOWN, UNKNOWN, org.headers);
+    expect(res.status).toBe(404);
+  });
+});
+
+const visit = (id: string, visited: unknown, headers?: Record<string, string>) => {
+  const body = new URLSearchParams();
+  if (visited !== undefined) body.set('visited', String(visited));
+  return createApp().request(`/outings/${id}/visit`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded', ...headers },
+    body,
+  });
+};
+
+/** 17/05/2030 18:30 in Vietnam (UTC+7) is 11:30 UTC. */
+const AT_SIT_TIME = new Date('2030-05-17T11:30:00Z');
+const BEFORE_SIT_TIME = new Date('2030-05-17T11:29:00Z');
+
+const setState = (id: string, sets: string, params: unknown[] = []) =>
+  getPool().query(`UPDATE outings SET ${sets} WHERE id = $1`, [id, ...params]);
+
+describe('POST /outings/:id/visit', () => {
+  beforeEach(async () => {
+    await resetDb();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  /** A closed outing won by venue A, organized by Minh. */
+  async function closedWithWinner() {
+    const org = await asParticipant('Minh');
+    const s = await seed(org.participant.id);
+    await setState(s.id, 'closed_at = now(), winner_venue_id = $2', [s.a]);
+    return { org, s };
+  }
+
+  const at = (now: Date) => vi.useFakeTimers({ toFake: ['Date'], now });
+
+  it('organizer at the sitting time with "yes": visited = true, 303 to the outing', async () => {
+    const { org, s } = await closedWithWinner();
+    at(AT_SIT_TIME);
+    const res = await visit(s.id, 'yes', org.headers);
+    expect(res.status).toBe(303);
+    expect(res.headers.get('location')).toBe(`/outings/${s.id}`);
+    expect((await getOuting(s.id))?.visited).toBe(true);
+  });
+
+  it('organizer after the sitting time with "no": visited = false', async () => {
+    const { org, s } = await closedWithWinner();
+    at(new Date('2030-05-17T14:00:00Z'));
+    const res = await visit(s.id, 'no', org.headers);
+    expect(res.status).toBe(303);
+    expect((await getOuting(s.id))?.visited).toBe(false);
+  });
+
+  it('no deadline: days later an unanswered outing is still accepted', async () => {
+    const { org, s } = await closedWithWinner();
+    at(new Date('2030-06-30T02:00:00Z'));
+    const res = await visit(s.id, 'yes', org.headers);
+    expect(res.status).toBe(303);
+    expect((await getOuting(s.id))?.visited).toBe(true);
+  });
+
+  it('organizer who never answered Going can answer', async () => {
+    const { org, s } = await closedWithWinner();
+    at(AT_SIT_TIME);
+    expect((await visit(s.id, 'yes', org.headers)).status).toBe(303);
+    expect((await getOuting(s.id))?.visited).toBe(true);
+  });
+
+  it('refuses any other value with 400 and stores nothing', async () => {
+    const { org, s } = await closedWithWinner();
+    at(AT_SIT_TIME);
+    for (const value of [undefined, '', 'true', 'YES', 'maybe']) {
+      expect((await visit(s.id, value, org.headers)).status).toBe(400);
+    }
+    expect((await getOuting(s.id))?.visited).toBeNull();
+  });
+
+  it('another browser gets 403 with a Vietnamese message and nothing is stored', async () => {
+    const { s } = await closedWithWinner();
+    const other = await asParticipant('Hoa');
+    at(AT_SIT_TIME);
+    const res = await visit(s.id, 'yes', other.headers);
+    expect(res.status).toBe(403);
+    const html = await res.text();
+    expect(html).toContain('Chỉ người tạo kèo mới được xác nhận đã đi hay không.');
+    expect(html).toContain(`href="/outings/${s.id}"`);
+    expect((await getOuting(s.id))?.visited).toBeNull();
+  });
+
+  it('a new browser is redirected by the identity middleware and nothing is stored', async () => {
+    const { s } = await closedWithWinner();
+    at(AT_SIT_TIME);
+    const res = await visit(s.id, 'yes', { Cookie: `dv_pid=${UNKNOWN}` });
+    expect(res.status).toBe(303);
+    expect(res.headers.get('location')).toBe('/name?next=/');
+    expect((await getOuting(s.id))?.visited).toBeNull();
+  });
+
+  it('before the sitting time: 409 and nothing stored', async () => {
+    const { org, s } = await closedWithWinner();
+    at(BEFORE_SIT_TIME);
+    const res = await visit(s.id, 'yes', org.headers);
+    expect(res.status).toBe(409);
+    expect(await res.text()).toContain('Chưa thể xác nhận');
+    expect((await getOuting(s.id))?.visited).toBeNull();
+  });
+
+  it('a second answer is refused with 409 and the first value stays', async () => {
+    const { org, s } = await closedWithWinner();
+    at(AT_SIT_TIME);
+    expect((await visit(s.id, 'yes', org.headers)).status).toBe(303);
+    const res = await visit(s.id, 'no', org.headers);
+    expect(res.status).toBe(409);
+    expect((await getOuting(s.id))?.visited).toBe(true);
+  });
+
+  it('a concurrent second answer is refused by the store: exactly one is recorded', async () => {
+    const { org, s } = await closedWithWinner();
+    at(AT_SIT_TIME);
+    const results = await Promise.all([
+      visit(s.id, 'yes', org.headers),
+      visit(s.id, 'no', org.headers),
+    ]);
+    expect(results.map((r) => r.status).sort()).toEqual([303, 409]);
+    const winner = results.find((r) => r.status === 303) === results[0];
+    expect((await getOuting(s.id))?.visited).toBe(winner);
+  });
+
+  it('open, cancelled and waiting outings: 409 and nothing stored', async () => {
+    const org = await asParticipant('Minh');
+    const open = await seed(org.participant.id);
+    const cancelled = await seed(org.participant.id);
+    await setState(cancelled.id, 'closed_at = now(), cancelled = true');
+    const waiting = await seed(org.participant.id);
+    await setState(waiting.id, 'closed_at = now()');
+    at(AT_SIT_TIME);
+    for (const s of [open, cancelled, waiting]) {
+      expect((await visit(s.id, 'yes', org.headers)).status).toBe(409);
+      expect((await getOuting(s.id))?.visited).toBeNull();
+    }
+  });
+
+  it('returns 404 for an unknown outing', async () => {
+    const org = await asParticipant('Minh');
+    const res = await visit(UNKNOWN, 'yes', org.headers);
     expect(res.status).toBe(404);
   });
 });
