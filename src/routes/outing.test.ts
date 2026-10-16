@@ -381,3 +381,44 @@ describe('GET /outings/:id when closed', () => {
     expect(html).toContain('/vote');
   });
 });
+
+describe('GET /outings/:id when cancelled', () => {
+  beforeEach(async () => {
+    await resetDb();
+  });
+
+  async function cancel(id: string) {
+    await getPool().query('UPDATE outings SET closed_at = now(), cancelled = true WHERE id = $1', [
+      id,
+    ]);
+  }
+
+  it('shows the cancelled text, headcount 2 and no forms', async () => {
+    const a = await asParticipant('Lan');
+    const b = await asParticipant('Minh');
+    const id = await seed(a.participant.id);
+    await setAnswer(id, a.participant.id, true);
+    await setAnswer(id, b.participant.id, true);
+    await cancel(id);
+    const res = await createApp().request(`/outings/${id}`, { headers: a.headers });
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    expect(html).toContain('17/05/2030');
+    expect(html).toContain('18:30');
+    expect(html).toContain('Đã huỷ: không đủ quân');
+    expect(html).toContain('Số người đi: 2');
+    expect(html).not.toContain('Đã chốt');
+    expect(html).not.toContain('/answer');
+    expect(html).not.toContain('/vote');
+    expect(html).not.toContain('<form');
+  });
+
+  it('shows headcount 0 when nobody is going', async () => {
+    const { participant, headers } = await asParticipant('Lan');
+    const id = await seed(participant.id);
+    await cancel(id);
+    const html = await (await createApp().request(`/outings/${id}`, { headers })).text();
+    expect(html).toContain('Đã huỷ: không đủ quân');
+    expect(html).toContain('Số người đi: 0');
+  });
+});
