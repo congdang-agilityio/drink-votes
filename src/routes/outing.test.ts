@@ -8,6 +8,12 @@ import { createVenue } from '../db/venues.js';
 import { castVote } from '../db/votes.js';
 import { resetDb } from '../test/db.js';
 import { asParticipant } from '../test/identity.js';
+import { qrSvg } from '../lib/qr.js';
+
+vi.mock('../lib/qr.js', async (orig) => {
+  const actual = await orig<typeof import('../lib/qr.js')>();
+  return { ...actual, qrSvg: vi.fn(actual.qrSvg) };
+});
 
 async function seed(organizerId: string, date = '2030-05-17') {
   const a = await createVenue({
@@ -662,5 +668,86 @@ describe('GET /outings/:id visit question', () => {
   it('an unanswered outing days later still shows it', async () => {
     const { org, id } = await closedWithWinner();
     expect(await page(id, org.headers, new Date('2030-06-30T02:00:00Z'))).toContain(QUESTION);
+  });
+});
+
+describe('QR code on the open outing page', () => {
+  beforeEach(async () => {
+    await resetDb();
+    vi.mocked(qrSvg).mockClear();
+  });
+
+  const svgOf = (html: string): string => html.match(/<svg[\s\S]*?<\/svg>/)?.[0] ?? '';
+
+  it('places one svg after the details and before the venues, without a button', async () => {
+    const { participant, headers } = await asParticipant('Lan');
+    const id = await seed(participant.id);
+    const html = await (await createApp().request(`/outings/${id}`, { headers })).text();
+    expect(html.match(/<svg/g)).toHaveLength(1);
+    const dl = html.indexOf('</dl>');
+    const svg = html.indexOf('<svg');
+    const venues = html.indexOf('Quán Ốc Đào');
+    expect(dl).toBeGreaterThan(-1);
+    expect(svg).toBeGreaterThan(dl);
+    expect(venues).toBeGreaterThan(svg);
+    expect(html).not.toContain('Sao chép');
+    expect(html).not.toContain('download');
+    expect(html).not.toContain(`http://localhost/outings/${id}`);
+    expect(html).toContain(`action="/outings/${id}/answer"`);
+  });
+
+  it('shows the organizer and another participant the identical code', async () => {
+    const org = await asParticipant('Lan');
+    const other = await asParticipant('Minh');
+    const id = await seed(org.participant.id);
+    const a = await (await createApp().request(`/outings/${id}`, { headers: org.headers })).text();
+    const b = await (await createApp().request(`/outings/${id}`, { headers: other.headers })).text();
+    expect(svgOf(a)).not.toBe('');
+    expect(svgOf(a)).toBe(svgOf(b));
+  });
+
+  it('is stable per outing and differs between outings', async () => {
+    const { participant, headers } = await asParticipant('Lan');
+    const id1 = await seed(participant.id);
+    const first1 = await getOuting(id1);
+    const id2 = await createOuting({
+      date: '2030-05-18',
+      sitTime: '18:30',
+      closeTime: '16:00',
+      venueIds: first1!.venues.map((v) => v.id),
+      organizerId: participant.id,
+    });
+    const get = async (id: string) =>
+      svgOf(await (await createApp().request(`/outings/${id}`, { headers })).text());
+    const first = await get(id1);
+    expect(await get(id1)).toBe(first);
+    expect(await get(id2)).not.toBe(first);
+  });
+
+  it('encodes the absolute link, https behind a proxy', async () => {
+    const { participant, headers } = await asParticipant('Lan');
+    const id = await seed(participant.id);
+    await createApp().request(`/outings/${id}`, { headers });
+    expect(qrSvg).toHaveBeenLastCalledWith(`http://localhost/outings/${id}`);
+    await createApp().request(`/outings/${id}`, {
+      headers: { ...headers, 'X-Forwarded-Proto': 'https' },
+    });
+    expect(qrSvg).toHaveBeenLastCalledWith(`https://localhost/outings/${id}`);
+  });
+
+  it('marks the page as not storable in a shared cache', async () => {
+    const { participant, headers } = await asParticipant('Lan');
+    const id = await seed(participant.id);
+    const res = await createApp().request(`/outings/${id}`, { headers });
+    expect(res.headers.get('cache-control')).toMatch(/private/);
+    expect(res.headers.get('cache-control')).toMatch(/no-store/);
+  });
+
+  it('adds no code to a closed outing', async () => {
+    const { participant, headers } = await asParticipant('Lan');
+    const id = await seed(participant.id);
+    await getPool().query('UPDATE outings SET closed_at = now(), cancelled = true WHERE id = $1', [id]);
+    const html = await (await createApp().request(`/outings/${id}`, { headers })).text();
+    expect(html).not.toContain('<svg');
   });
 });
