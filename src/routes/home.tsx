@@ -12,6 +12,9 @@ home.get('/', (c) =>
         <p>
           <a href="/venues">Danh sách quán</a>
         </p>
+        <p>
+          <a href="/outings/new">Tạo kèo</a>
+        </p>
       </Layout>
     )}`,
   ),
