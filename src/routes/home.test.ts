@@ -1,5 +1,6 @@
-import { afterAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../app.js';
+import { setAnswer } from '../db/attendance.js';
 import { createOuting } from '../db/outings.js';
 import { closePool } from '../db/pool.js';
 import { createVenue } from '../db/venues.js';
@@ -65,5 +66,67 @@ describe('GET /', () => {
     const html = await (await createApp().request('/name')).text();
     expect(html).not.toContain('/me/name');
     expect(html).toMatch(/<header[^>]*>[\s\S]*Drink Votes[\s\S]*<\/header>/);
+  });
+  describe('upcoming outings', () => {
+    let venueId: string;
+    let organizerId: string;
+
+    const make = (date: string, sitTime: string) =>
+      createOuting({ date, sitTime, closeTime: '10:00', venueIds: [venueId], organizerId });
+
+    beforeEach(async () => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(new Date('2026-10-14T20:00:00Z')); // 15/10/2026 in Vietnam
+      venueId = (await createVenue({ name: 'Quán A', address: '1 Lê Lợi', mapsUrl: 'https://maps.example/a' })).id;
+      organizerId = (await asParticipant('Minh')).participant.id;
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    const getHome = async () => {
+      const { headers } = await asParticipant('Lan');
+      return (await createApp().request('/', { headers })).text();
+    };
+
+    it('lists outings soonest first with date, time and going count, each a link', async () => {
+      const a = await make('2026-10-17', '19:00');
+      const b = await make('2026-10-15', '18:00');
+      const c = await make('2026-10-16', '18:30');
+      await setAnswer(c, organizerId, true);
+      const html = await getHome();
+      const order = [b, c, a].map((id) => html.indexOf(`href="/outings/${id}"`));
+      expect(order.every((i) => i >= 0)).toBe(true);
+      expect(order).toEqual([...order].sort((x, y) => x - y));
+      expect(html).toContain('15/10/2026 · 18:00 · 0 người đi');
+      expect(html).toContain('16/10/2026 · 18:30 · 1 người đi');
+      expect(html).toContain('17/10/2026 · 19:00 · 0 người đi');
+      const res = await createApp().request(`/outings/${c}`, { headers: (await asParticipant('Lan')).headers });
+      expect(res.status).toBe(200);
+    });
+
+    it('orders outings on the same day by sitting time', async () => {
+      const late = await make('2026-10-16', '20:00');
+      const early = await make('2026-10-16', '18:30');
+      const html = await getHome();
+      expect(html.indexOf(`/outings/${early}"`)).toBeGreaterThan(-1);
+      expect(html.indexOf(`/outings/${early}"`)).toBeLessThan(html.indexOf(`/outings/${late}"`));
+    });
+
+    it('hides older outings but keeps their page reachable', async () => {
+      const old = await make('2026-10-14', '18:00');
+      const html = await getHome();
+      expect(html).not.toContain(`/outings/${old}"`);
+      const res = await createApp().request(`/outings/${old}`, { headers: (await asParticipant('Lan')).headers });
+      expect(res.status).toBe(200);
+    });
+
+    it('shows an empty message and keeps the create link when nothing is upcoming', async () => {
+      await make('2026-10-14', '18:00');
+      const html = await getHome();
+      expect(html).toContain('Chưa có kèo nào sắp tới.');
+      expect(html).toContain('href="/outings/new"');
+    });
   });
 });
