@@ -371,6 +371,60 @@ describe('GET /outings/:id when closed', () => {
     expect(html).not.toContain('<form');
   });
 
+  it('shows the winner address and a Maps link for an http(s) mapsUrl', async () => {
+    const { participant, headers } = await asParticipant('Lan');
+    const id = await seed(participant.id);
+    await close(id, 'Quán Ốc Đào');
+    const html = await (await createApp().request(`/outings/${id}`, { headers })).text();
+    expect(html).toContain('1 Lê Lợi');
+    expect(html).toContain('href="https://maps.example/a"');
+  });
+
+  it('renders no Maps link when the winner has no http(s) mapsUrl', async () => {
+    const { participant, headers } = await asParticipant('Lan');
+    const id = await seed(participant.id);
+    await close(id, 'Bia Hơi Hà Nội');
+    const html = await (await createApp().request(`/outings/${id}`, { headers })).text();
+    expect(html).toContain('2 Hai Bà Trưng');
+    expect(html).not.toContain('javascript:');
+    expect(html.slice(html.indexOf('<main>'))).not.toContain('<a ');
+  });
+
+  it('lists only the Going people with the final headcount', async () => {
+    const lan = await asParticipant('Lan');
+    const id = await seed(lan.participant.id);
+    const names = ['Lan', 'Minh', 'Nam', 'Oanh'];
+    await setAnswer(id, lan.participant.id, true);
+    for (const n of names.slice(1)) await setAnswer(id, (await asParticipant(n)).participant.id, true);
+    await setAnswer(id, (await asParticipant('Phong')).participant.id, false);
+    await asParticipant('Quang');
+    await close(id, 'Quán Ốc Đào');
+    const html = await (await createApp().request(`/outings/${id}`, { headers: lan.headers })).text();
+    expect(html).toContain('Số người đi: 4');
+    for (const n of names) expect(html).toContain(`<li>${n}</li>`);
+    expect(html).not.toContain('Phong');
+    expect(html).not.toContain('Quang');
+  });
+
+  it('shows the vote count of every venue without voter names', async () => {
+    const lan = await asParticipant('Lan');
+    const minh = await asParticipant('Minh');
+    const id = await seed(lan.participant.id);
+    const venues = (await getOuting(id))!.venues;
+    const a = venues.find((v) => v.name === 'Quán Ốc Đào')!.id;
+    await setAnswer(id, lan.participant.id, true);
+    await setAnswer(id, minh.participant.id, true);
+    await castVote(id, lan.participant.id, a);
+    await castVote(id, minh.participant.id, a);
+    await close(id, 'Quán Ốc Đào');
+    const html = await (await createApp().request(`/outings/${id}`, { headers: lan.headers })).text();
+    expect(html).toContain('2 phiếu');
+    expect(html).toContain('0 phiếu');
+    const votesSection = html.slice(html.indexOf('venue-list'), html.indexOf('Số người đi'));
+    expect(votesSection).not.toContain('Minh');
+    expect(votesSection).not.toContain('Lan');
+  });
+
   it('keeps the open page with its buttons while not closed', async () => {
     const { participant, headers } = await asParticipant('Lan');
     const id = await seed(participant.id);

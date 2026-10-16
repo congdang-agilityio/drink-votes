@@ -1,3 +1,5 @@
+import type { Attendance } from '../db/attendance.js';
+import type { VenueCount } from '../db/votes.js';
 import type { Outing } from '../db/outings.js';
 import { formatDate, formatTime } from '../lib/time.js';
 import { Layout } from './layout.js';
@@ -7,8 +9,20 @@ export type ClosedOutingView = Pick<
   'id' | 'date' | 'sitTime' | 'closeTime' | 'venues' | 'winnerVenueId'
 >;
 
-/** Closed outing: label and winner only. It has no forms, so nothing can change or reopen it. */
-export function ClosedOutingPage({ outing }: { outing: ClosedOutingView }) {
+const isHttpUrl = (url: string): boolean => /^https?:\/\//i.test(url);
+
+/** Closed outing: label, winner, final headcount and vote counts. No forms, so nothing can change or reopen it. */
+export function ClosedOutingPage({
+  outing,
+  attendance,
+  counts,
+}: {
+  outing: ClosedOutingView;
+  attendance: Attendance;
+  counts: VenueCount[];
+}) {
+  const countOf = (venueId: string): number =>
+    counts.find((c) => c.venueId === venueId)?.count ?? 0;
   const winner = outing.winnerVenueId
     ? outing.venues.find((v) => v.id === outing.winnerVenueId)
     : undefined;
@@ -26,7 +40,33 @@ export function ClosedOutingPage({ outing }: { outing: ClosedOutingView }) {
         <dt>Giờ chốt</dt>
         <dd>{formatTime(outing.closeTime)}</dd>
       </dl>
-      {winner ? <p class="winner">{`Quán: ${winner.name}`}</p> : null}
+      {winner ? (
+        <div class="winner">
+          <p>{`Quán: ${winner.name}`}</p>
+          <p>{winner.address}</p>
+          {winner.mapsUrl && isHttpUrl(winner.mapsUrl) ? (
+            <p>
+              <a href={winner.mapsUrl} rel="noopener noreferrer">
+                Xem bản đồ
+              </a>
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+      <h2>Số phiếu</h2>
+      <ul class="venue-list">
+        {outing.venues.map((v) => (
+          <li>
+            <strong>{v.name}</strong> <span class="vote-count">{countOf(v.id)} phiếu</span>
+          </li>
+        ))}
+      </ul>
+      <h2>Số người đi: {attendance.goingCount}</h2>
+      <ul class="going-list">
+        {attendance.goingNames.map((name) => (
+          <li>{name}</li>
+        ))}
+      </ul>
     </Layout>
   );
 }

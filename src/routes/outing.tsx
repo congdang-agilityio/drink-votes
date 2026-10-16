@@ -24,8 +24,12 @@ outing.get('/outings/:id{[0-9a-f-]{36}}', async (c) => {
     );
   }
   if (found.closedAt) {
+    const [attendance, counts] = await Promise.all([
+      getAttendance(found.id),
+      getVoteCounts(found.id),
+    ]);
     return c.html(
-      `<!DOCTYPE html>${(<ClosedOutingPage outing={found} />)}`,
+      `<!DOCTYPE html>${(<ClosedOutingPage outing={found} attendance={attendance} counts={counts} />)}`,
     );
   }
   const [attendance, myAnswer, counts, myVote] = await Promise.all([
