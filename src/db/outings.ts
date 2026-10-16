@@ -23,6 +23,8 @@ export interface Outing {
   closedAt: Date | null;
   cancelled: boolean;
   winnerVenueId: string | null;
+  /** Organizer's visit answer: true went, false did not go, null not answered. */
+  visited: boolean | null;
   venues: Venue[];
 }
 
@@ -37,6 +39,7 @@ interface OutingRow {
   closed_at: Date | null;
   cancelled: boolean;
   winner_venue_id: string | null;
+  visited: boolean | null;
 }
 
 interface VenueRow {
@@ -89,7 +92,7 @@ export async function getOuting(id: string): Promise<Outing | null> {
     `SELECT id, to_char(outing_date, 'YYYY-MM-DD') AS date,
             to_char(sit_time, 'HH24:MI') AS sit_time,
             to_char(close_time, 'HH24:MI') AS close_time, organizer_id,
-            closed_at, cancelled, winner_venue_id
+            closed_at, cancelled, winner_venue_id, visited
        FROM outings WHERE id = $1`,
     [id],
   );
@@ -110,6 +113,7 @@ export async function getOuting(id: string): Promise<Outing | null> {
     closedAt: row.closed_at,
     cancelled: row.cancelled,
     winnerVenueId: row.winner_venue_id,
+    visited: row.visited,
     venues: venues.rows.map((v) => ({
       id: v.id,
       name: v.name,

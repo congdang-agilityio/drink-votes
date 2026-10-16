@@ -45,7 +45,7 @@ describe('migration 0007_outing_close', () => {
                 '00000000-0000-4000-8000-000000000001')`);
 
     const applied = await migrate(pool, resolve('migrations'));
-    expect(applied).toEqual(['0007_outing_close.sql']);
+    expect(applied.slice(0, 1)).toEqual(['0007_outing_close.sql']);
 
     const { rows } = await pool.query(
       'SELECT closed_at, cancelled, winner_venue_id FROM outings',
