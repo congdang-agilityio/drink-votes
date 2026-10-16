@@ -13,7 +13,7 @@ async function newOuting(organizerId: string): Promise<string> {
   const a = await createVenue({ name: `A ${Math.random()}`, address: 'a' });
   const b = await createVenue({ name: `B ${Math.random()}`, address: 'b' });
   return createOuting({
-    date: '2026-12-31',
+    date: '2030-12-31',
     sitTime: '18:30',
     closeTime: '16:00',
     venueIds: [a.id, b.id],
@@ -209,5 +209,104 @@ describe('attendance store', () => {
     const outingId = await newOuting(organizer.id);
     await expect(setAnswer(UNKNOWN, organizer.id, true)).rejects.toThrow();
     await expect(setAnswer(outingId, UNKNOWN, true)).rejects.toThrow();
+  });
+
+  describe('close check (2030-12-31 16:00 Asia/Ho_Chi_Minh = 09:00Z)', () => {
+    const at = (iso: string) => ({ now: new Date(iso) });
+    const BEFORE = at('2030-12-31T08:59:00Z');
+    const AT_CLOSE = at('2030-12-31T09:00:00Z');
+    const AFTER = at('2030-12-31T12:00:00Z');
+
+    it('accepts an answer one minute before the close instant', async () => {
+      const organizer = await createParticipant('Minh');
+      const lan = await createParticipant('Lan');
+      const outingId = await newOuting(organizer.id);
+      expect(await setAnswer(outingId, lan.id, true, undefined, BEFORE)).toBe('ok');
+      expect(await getAnswer(outingId, lan.id)).toBe(true);
+    });
+
+    it('refuses a first answer at and after the close instant and writes nothing', async () => {
+      const organizer = await createParticipant('Minh');
+      const lan = await createParticipant('Lan');
+      const outingId = await newOuting(organizer.id);
+      for (const when of [AT_CLOSE, AFTER]) {
+        expect(await setAnswer(outingId, lan.id, true, undefined, when)).toBe('closed');
+      }
+      expect(await rowCount(outingId, lan.id)).toBe(0);
+      expect(await getAttendance(outingId)).toEqual({ goingCount: 0, goingNames: [] });
+    });
+
+    it('keeps the answer and the vote after a refused Not going', async () => {
+      const organizer = await createParticipant('Minh');
+      const lan = await createParticipant('Lan');
+      const outingId = await newOuting(organizer.id);
+      const [a] = (await getVoteCounts(outingId)).map((c) => c.venueId);
+      await setAnswer(outingId, lan.id, true, undefined, BEFORE);
+      await castVote(outingId, lan.id, a, BEFORE);
+      expect(await setAnswer(outingId, lan.id, false, undefined, AT_CLOSE)).toBe('closed');
+      expect(await getAnswer(outingId, lan.id)).toBe(true);
+      expect(await getVote(outingId, lan.id)).toBe(a);
+      expect(await getAttendance(outingId)).toEqual({ goingCount: 1, goingNames: ['Lan'] });
+    });
+
+    it('refuses an answer when the outing is marked closed, even before the close time', async () => {
+      const organizer = await createParticipant('Minh');
+      const lan = await createParticipant('Lan');
+      const outingId = await newOuting(organizer.id);
+      await setAnswer(outingId, lan.id, true, undefined, BEFORE);
+      await getPool().query('UPDATE outings SET closed_at = now() WHERE id = $1', [outingId]);
+      expect(await setAnswer(outingId, lan.id, false, undefined, BEFORE)).toBe('closed');
+      expect(await getAnswer(outingId, lan.id)).toBe(true);
+    });
+
+    it('reads the close time in the given time zone', async () => {
+      const organizer = await createParticipant('Minh');
+      const lan = await createParticipant('Lan');
+      const outingId = await newOuting(organizer.id);
+      // 12:00Z is past 16:00 in Vietnam but before 16:00 UTC.
+      const utc = { tz: 'UTC', now: new Date('2030-12-31T12:00:00Z') };
+      expect(await setAnswer(outingId, lan.id, true, undefined, utc)).toBe('ok');
+      const utcClose = { tz: 'UTC', now: new Date('2030-12-31T16:00:00Z') };
+      expect(await setAnswer(outingId, lan.id, false, undefined, utcClose)).toBe('closed');
+    });
+
+    it('waits for a concurrent close holding the outing FOR UPDATE, then refuses', async () => {
+      const organizer = await createParticipant('Minh');
+      const lan = await createParticipant('Lan');
+      const outingId = await newOuting(organizer.id);
+      const [a] = (await getVoteCounts(outingId)).map((c) => c.venueId);
+      await setAnswer(outingId, lan.id, true, undefined, BEFORE);
+      const closer = await getPool().connect();
+      try {
+        await closer.query('BEGIN');
+        await closer.query('SELECT 1 FROM outings WHERE id = $1 FOR UPDATE', [outingId]);
+        const answer = setAnswer(outingId, lan.id, false, undefined, BEFORE);
+        const vote = castVote(outingId, lan.id, a, BEFORE);
+        await new Promise((r) => setTimeout(r, 200));
+        await closer.query('UPDATE outings SET closed_at = now() WHERE id = $1', [outingId]);
+        await closer.query('COMMIT');
+        expect(await answer).toBe('closed');
+        expect(await vote).toBe('closed');
+      } finally {
+        closer.release();
+      }
+      expect(await getAnswer(outingId, lan.id)).toBe(true);
+      expect(await getVote(outingId, lan.id)).toBeNull();
+    });
+
+    it('refuses on a given client inside its transaction', async () => {
+      const organizer = await createParticipant('Minh');
+      const lan = await createParticipant('Lan');
+      const outingId = await newOuting(organizer.id);
+      const client = await getPool().connect();
+      try {
+        await client.query('BEGIN');
+        expect(await setAnswer(outingId, lan.id, true, client, AT_CLOSE)).toBe('closed');
+        await client.query('COMMIT');
+      } finally {
+        client.release();
+      }
+      expect(await getAnswer(outingId, lan.id)).toBeNull();
+    });
   });
 });

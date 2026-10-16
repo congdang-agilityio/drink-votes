@@ -2,7 +2,7 @@ import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { createApp } from '../app.js';
 import { getAnswer } from '../db/attendance.js';
 import { createOuting } from '../db/outings.js';
-import { closePool } from '../db/pool.js';
+import { closePool, getPool } from '../db/pool.js';
 import { createVenue } from '../db/venues.js';
 import { resetDb } from '../test/db.js';
 import { asParticipant } from '../test/identity.js';
@@ -53,12 +53,28 @@ describe('POST /outings/:id/answer', () => {
     }
   });
 
-  it('still accepts changes after the close time passed', async () => {
+  it('refuses an answer after the close time with a 409 closed page and keeps the answer', async () => {
     const { participant, headers } = await asParticipant('Lan');
     const id = await seed(participant.id, '2020-01-02');
+    for (const value of ['yes', 'no']) {
+      const res = await post(`/outings/${id}/answer`, headers, value);
+      expect(res.status).toBe(409);
+      const html = await res.text();
+      expect(html).toContain('Kèo đã chốt, không thể thay đổi.');
+      expect(html).toContain(`href="/outings/${id}"`);
+    }
+    expect(await getAnswer(id, participant.id)).toBeNull();
+  });
+
+  it('refuses an answer on an outing marked closed before its close time', async () => {
+    const { participant, headers } = await asParticipant('Lan');
+    const id = await seed(participant.id);
     expect((await post(`/outings/${id}/answer`, headers, 'yes')).status).toBe(303);
-    expect((await post(`/outings/${id}/answer`, headers, 'no')).status).toBe(303);
-    expect(await getAnswer(id, participant.id)).toBe(false);
+    await getPool().query('UPDATE outings SET closed_at = now() WHERE id = $1', [id]);
+    const res = await post(`/outings/${id}/answer`, headers, 'no');
+    expect(res.status).toBe(409);
+    expect(await res.text()).toContain('Kèo đã chốt, không thể thay đổi.');
+    expect(await getAnswer(id, participant.id)).toBe(true);
   });
 
   it('returns 404 for an unknown outing and writes nothing', async () => {

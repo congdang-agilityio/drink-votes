@@ -24,7 +24,7 @@ async function newOuting(): Promise<Setup> {
   const b = await createVenue({ name: `B ${Math.random()}`, address: 'b' });
   const c = await createVenue({ name: `C ${Math.random()}`, address: 'c' });
   const outingId = await createOuting({
-    date: '2026-12-31',
+    date: '2030-12-31',
     sitTime: '18:30',
     closeTime: '16:00',
     venueIds: [a.id, b.id, c.id],
@@ -167,5 +167,57 @@ describe('vote store', () => {
         [s.outingId, lan.id, s.a],
       ),
     ).rejects.toThrow();
+  });
+
+  describe('close check (2030-12-31 16:00 Asia/Ho_Chi_Minh = 09:00Z)', () => {
+    const at = (iso: string) => ({ now: new Date(iso) });
+    const BEFORE = at('2030-12-31T08:59:00Z');
+    const AT_CLOSE = at('2030-12-31T09:00:00Z');
+    const AFTER = at('2030-12-31T12:00:00Z');
+
+    it('accepts a vote one minute before the close instant', async () => {
+      const s = await newOuting();
+      const lan = await createParticipant('Lan');
+      await setAnswer(s.outingId, lan.id, true, undefined, BEFORE);
+      expect(await castVote(s.outingId, lan.id, s.a, BEFORE)).toBe('ok');
+      expect(await getVote(s.outingId, lan.id)).toBe(s.a);
+    });
+
+    it('refuses a vote at and after the close instant and keeps the earlier one', async () => {
+      const s = await newOuting();
+      const lan = await createParticipant('Lan');
+      await setAnswer(s.outingId, lan.id, true, undefined, BEFORE);
+      await castVote(s.outingId, lan.id, s.a, BEFORE);
+      for (const when of [AT_CLOSE, AFTER]) {
+        expect(await castVote(s.outingId, lan.id, s.b, when)).toBe('closed');
+      }
+      expect(await getVote(s.outingId, lan.id)).toBe(s.a);
+      expect((await getVoteCounts(s.outingId)).map((c) => c.count)).toEqual([1, 0, 0]);
+    });
+
+    it('refuses a first vote after the close instant and writes nothing', async () => {
+      const s = await newOuting();
+      const lan = await createParticipant('Lan');
+      await setAnswer(s.outingId, lan.id, true, undefined, BEFORE);
+      expect(await castVote(s.outingId, lan.id, s.a, AFTER)).toBe('closed');
+      expect(await voteRows(s.outingId, lan.id)).toBe(0);
+    });
+
+    it('refuses a vote when the outing is marked closed, even before the close time', async () => {
+      const s = await newOuting();
+      const lan = await createParticipant('Lan');
+      await setAnswer(s.outingId, lan.id, true, undefined, BEFORE);
+      await getPool().query('UPDATE outings SET closed_at = now() WHERE id = $1', [s.outingId]);
+      expect(await castVote(s.outingId, lan.id, s.a, BEFORE)).toBe('closed');
+      expect(await voteRows(s.outingId, lan.id)).toBe(0);
+    });
+
+    it('reads the close time in the given time zone', async () => {
+      const s = await newOuting();
+      const lan = await createParticipant('Lan');
+      await setAnswer(s.outingId, lan.id, true, undefined, BEFORE);
+      const utc = { tz: 'UTC', now: new Date('2030-12-31T12:00:00Z') };
+      expect(await castVote(s.outingId, lan.id, s.a, utc)).toBe('ok');
+    });
   });
 });

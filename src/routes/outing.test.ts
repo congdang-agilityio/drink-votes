@@ -154,9 +154,9 @@ describe('GET /outings/:id', () => {
       expect(goingList(minhHtml)).toBe('<li>Lan</li>');
     });
 
-    it('follows answer changes after the close time passed', async () => {
+    it('follows answer changes', async () => {
       const lan = await asParticipant('Lan');
-      const id = await seed(lan.participant.id, '2020-01-02');
+      const id = await seed(lan.participant.id);
       await setAnswer(id, lan.participant.id, true);
       expect(await get(id, lan.headers)).toContain('Số người đi: 1');
       await setAnswer(id, lan.participant.id, false);
