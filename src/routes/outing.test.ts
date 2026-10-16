@@ -3,6 +3,7 @@ import { createApp } from '../app.js';
 import { setAnswer } from '../db/attendance.js';
 import { createOuting, getOuting } from '../db/outings.js';
 import { closePool, getPool } from '../db/pool.js';
+import { recordTies } from '../db/ties.js';
 import { createVenue } from '../db/venues.js';
 import { castVote } from '../db/votes.js';
 import { resetDb } from '../test/db.js';
@@ -488,5 +489,73 @@ describe('GET /outings/:id when cancelled', () => {
     const otherHtml = await get(other.headers);
     expect(otherHtml).not.toContain('/close');
     expect(otherHtml).not.toContain('Chốt ngay');
+  });
+});
+
+describe('GET /outings/:id when waiting for the organizer to choose', () => {
+  beforeEach(async () => {
+    await resetDb();
+  });
+
+  async function setup() {
+    const org = await asParticipant('Lan');
+    const other = await asParticipant('Minh');
+    const a = await createVenue({ name: 'Quán A', address: '1 A', mapsUrl: '' });
+    const b = await createVenue({ name: 'Quán B', address: '2 B', mapsUrl: '' });
+    const c = await createVenue({ name: 'Quán C', address: '3 C', mapsUrl: '' });
+    const id = await createOuting({
+      date: '2030-05-17',
+      sitTime: '18:30',
+      closeTime: '16:00',
+      venueIds: [a.id, b.id, c.id],
+      organizerId: org.participant.id,
+    });
+    await setAnswer(id, org.participant.id, true);
+    await setAnswer(id, other.participant.id, true);
+    await castVote(id, org.participant.id, a.id);
+    await castVote(id, other.participant.id, b.id);
+    await getPool().query('UPDATE outings SET closed_at = now() WHERE id = $1', [id]);
+    await recordTies(getPool(), id, [a.id, b.id]);
+    return { org, other, a, b, c, id };
+  }
+
+  const get = async (id: string, headers: Record<string, string>) =>
+    (await createApp().request(`/outings/${id}`, { headers })).text();
+
+  it('shows the organizer a choose form for each tied venue only', async () => {
+    const { org, a, b, c, id } = await setup();
+    const html = await get(id, org.headers);
+    expect(html).toContain('Đã chốt – chờ chủ kèo chọn quán');
+    expect(html).toContain('Số người đi: 2');
+    expect(html).toContain('Lan');
+    expect(html).toContain('Minh');
+    expect(html).toContain('1 phiếu');
+    expect(html).toContain('Quán A');
+    expect(html).toContain('Quán B');
+    expect(html.match(/action="\/outings\/[^"]+\/choose"/g)).toHaveLength(2);
+    expect(html).toContain(`value="${a.id}"`);
+    expect(html).toContain(`value="${b.id}"`);
+    expect(html).not.toContain(`value="${c.id}"`);
+    expect(html).toContain('Chọn quán này');
+    expect(html).not.toContain('/answer');
+    expect(html).not.toContain('/vote');
+  });
+
+  it('shows another browser the waiting page without any form', async () => {
+    const { other, id } = await setup();
+    const html = await get(id, other.headers);
+    expect(html).toContain('chờ chủ kèo chọn quán');
+    expect(html).toContain('Số người đi: 2');
+    expect(html).toContain('Quán A');
+    expect(html).not.toContain('<form');
+  });
+
+  it('renders the closed result page once a winner is set', async () => {
+    const { org, b, id } = await setup();
+    await getPool().query('UPDATE outings SET winner_venue_id = $2 WHERE id = $1', [id, b.id]);
+    const html = await get(id, org.headers);
+    expect(html).toContain('Quán: Quán B');
+    expect(html).not.toContain('chờ chủ kèo');
+    expect(html).not.toContain('<form');
   });
 });
