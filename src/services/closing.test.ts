@@ -1,4 +1,5 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
+import { config } from '../config.js';
 import { setAnswer } from '../db/attendance.js';
 import { createOuting, getOuting } from '../db/outings.js';
 import { createParticipant } from '../db/participants.js';
@@ -11,6 +12,8 @@ import { closeDueOutings, closeOuting } from './closing.js';
 const TZ = 'Asia/Ho_Chi_Minh';
 // Existing scenarios predate the headcount rule: they run with no minimum.
 const NO_MIN = 0;
+// Headcount scenarios pin the threshold so an ambient MIN_PEOPLE cannot change them.
+const MIN = 3;
 // 20/10/2026 16:00 in Asia/Ho_Chi_Minh (UTC+7).
 const CLOSE_INSTANT = new Date('2026-10-20T09:00:00Z');
 const AT_1559 = new Date('2026-10-20T08:59:00Z');
@@ -94,7 +97,9 @@ describe('closing service', () => {
   it('cancels a due outing with 2 Going, with no winner', async () => {
     const s = await newOuting();
     await vote(s.outingId, [s.a, s.a]);
-    expect(await closeDueOutings({ now: CLOSE_INSTANT, tz: TZ })).toEqual([s.outingId]);
+    expect(await closeDueOutings({ now: CLOSE_INSTANT, tz: TZ, minPeople: MIN })).toEqual([
+      s.outingId,
+    ]);
     const outing = await getOuting(s.outingId);
     expect(outing?.cancelled).toBe(true);
     expect(outing?.winnerVenueId).toBeNull();
@@ -104,7 +109,7 @@ describe('closing service', () => {
   it('does not cancel with exactly 3 Going', async () => {
     const s = await newOuting();
     await vote(s.outingId, [s.a, s.a, s.b]);
-    await closeDueOutings({ now: CLOSE_INSTANT, tz: TZ });
+    await closeDueOutings({ now: CLOSE_INSTANT, tz: TZ, minPeople: MIN });
     const outing = await getOuting(s.outingId);
     expect(outing?.cancelled).toBe(false);
     expect(outing?.winnerVenueId).toBe(s.a);
@@ -112,11 +117,20 @@ describe('closing service', () => {
 
   it('cancels with nobody Going, and closeOuting reports it', async () => {
     const s = await newOuting();
-    expect(await closeOuting(s.outingId, { now: CLOSE_INSTANT, tz: TZ })).toMatchObject({
+    const state = await closeOuting(s.outingId, { now: CLOSE_INSTANT, tz: TZ, minPeople: MIN });
+    expect(state).toMatchObject({
       cancelled: true,
       winnerVenueId: null,
       changed: true,
     });
+  });
+
+  it('defaults minPeople to config.minPeople', async () => {
+    const s = await newOuting();
+    const goingCount = config.minPeople - 1;
+    await vote(s.outingId, Array.from({ length: goingCount }, () => s.a));
+    const state = await closeOuting(s.outingId, { now: CLOSE_INSTANT, tz: TZ });
+    expect(state?.cancelled).toBe(true);
   });
 
   it('uses minPeople 5: 4 Going cancels', async () => {
