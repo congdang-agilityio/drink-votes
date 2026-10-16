@@ -116,7 +116,10 @@ describe('migration 0008_outing_visit', () => {
         VALUES ('00000000-0000-4000-8000-000000000002', '2026-01-01', '18:30', '16:00',
                 '00000000-0000-4000-8000-000000000001')`);
 
-    expect(await migrate(pool, resolve('migrations'))).toEqual(['0008_outing_visit.sql']);
+    expect(await migrate(pool, resolve('migrations'))).toEqual([
+      '0008_outing_visit.sql',
+      '0009_outing_ties.sql',
+    ]);
     const { rows } = await pool.query('SELECT visited FROM outings');
     expect(rows).toEqual([{ visited: null }]);
   });
