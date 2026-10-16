@@ -25,6 +25,11 @@ const voteCss = `
 .venue-list li { background: #fff; border-radius: 1rem; box-shadow: 0 2px 8px rgba(122,59,30,.12); padding: 0.75rem 1rem; margin-bottom: 0.75rem; }
 `;
 
+const qrCss = `
+.outing-qr { width: min(14rem, 70vw); margin: 1rem auto; background: #fff; }
+.outing-qr svg { display: block; width: 100%; height: auto; }
+`;
+
 const myAnswerText = (a: boolean | null): string =>
   a === null ? 'Bạn chưa trả lời' : a ? 'Bạn: Đi' : 'Bạn: Không đi';
 
@@ -36,6 +41,7 @@ export function OutingPage({
   leaders,
   myVote,
   isOrganizer = false,
+  qrSvg,
 }: {
   outing: OutingView;
   attendance: Attendance;
@@ -44,6 +50,7 @@ export function OutingPage({
   leaders: string[];
   myVote: string | null;
   isOrganizer?: boolean;
+  qrSvg?: string;
 }) {
   const countOf = (venueId: string): number =>
     counts.find((c) => c.venueId === venueId)?.count ?? 0;
@@ -59,6 +66,12 @@ export function OutingPage({
         <dt>Giờ chốt</dt>
         <dd>{formatTime(outing.closeTime)}</dd>
       </dl>
+      {qrSvg ? (
+        <>
+          <style dangerouslySetInnerHTML={{ __html: qrCss }} />
+          <div class="outing-qr" role="img" aria-label="Mã QR của kèo" dangerouslySetInnerHTML={{ __html: qrSvg }} />
+        </>
+      ) : null}
       <h2>Quán</h2>
       <p class="leading">
         {leaderNames.length === 0

@@ -13,6 +13,8 @@ import { leadingVenues } from '../services/leading.js';
 import { CancelledOutingPage } from '../views/cancelled-outing.js';
 import { ClosedOutingPage } from '../views/closed-outing.js';
 import { WaitingOutingPage } from '../views/waiting-outing.js';
+import { outingUrl } from '../lib/outing-url.js';
+import { qrSvg } from '../lib/qr.js';
 import { OutingNotFound, OutingPage } from '../views/outing-page.js';
 
 export const outing = new Hono<IdentityEnv>();
@@ -21,6 +23,8 @@ outing.route('/', vote);
 outing.route('/', organizer);
 
 outing.get('/outings/:id{[0-9a-f-]{36}}', async (c) => {
+  // The QR link is built from the request's Host header: never share this page via a cache.
+  c.header('Cache-Control', 'private, no-store');
   const found = await getOuting(c.req.param('id'));
   if (!found) return c.html(`<!DOCTYPE html>${(<OutingNotFound />)}`, 404);
   if (found.closedAt && found.cancelled) {
@@ -73,6 +77,7 @@ outing.get('/outings/:id{[0-9a-f-]{36}}', async (c) => {
         leaders={leadingVenues(counts, lastVisits)}
         myVote={myVote}
         isOrganizer={found.organizerId === c.var.participant.id}
+        qrSvg={qrSvg(outingUrl(c.req.url, c.req.header('x-forwarded-proto'), found.id))}
       />)}`,
   );
 });
