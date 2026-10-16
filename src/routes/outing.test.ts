@@ -184,7 +184,7 @@ describe('GET /outings/:id', () => {
       (await createApp().request(`/outings/${id}`, { headers })).text();
     const venueIds = async (id: string) => (await getOuting(id))!.venues.map((v) => v.id);
     const countOf = (html: string, name: string) =>
-      html.match(new RegExp(`${name}[\\s\\S]*?(\\d+) phiếu`))?.[1];
+      html.match(new RegExp(`<strong>${name}[\\s\\S]*?(\\d+) phiếu`))?.[1];
     const voteForms = (html: string) => html.match(/<form[^>]*\/vote"/g) ?? [];
 
     it('shows counts, vote buttons to a Going person, and marks their choice', async () => {
@@ -262,6 +262,69 @@ describe('GET /outings/:id', () => {
       expect(countOf(html, 'Quán Ốc Đào')).toBe('0');
       expect(html).not.toContain('Bạn đã chọn');
       expect(voteForms(html)).toHaveLength(2);
+    });
+    describe('leading venues', () => {
+      const leadLine = (html: string) => html.match(/Đang dẫn đầu:[^<]*/)?.[0];
+
+      it('shows the single leader', async () => {
+        const lan = await asParticipant('Lan');
+        const minh = await asParticipant('Minh');
+        const nam = await asParticipant('Nam');
+        const id = await seed(lan.participant.id);
+        const [b, a] = await venueIds(id);
+        for (const p of [lan, minh, nam]) await setAnswer(id, p.participant.id, true);
+        await castVote(id, lan.participant.id, a!);
+        await castVote(id, minh.participant.id, a!);
+        await castVote(id, nam.participant.id, b!);
+        const html = await get(id, lan.headers);
+        expect(leadLine(html)).toContain('Quán Ốc Đào');
+        expect(leadLine(html)).not.toContain('Bia Hơi');
+        expect(html).not.toContain('Chưa có phiếu');
+      });
+
+      it('shows all tied leaders and not a venue below', async () => {
+        const ps = [] as Awaited<ReturnType<typeof asParticipant>>[];
+        for (const n of ['Lan', 'Minh', 'Nam', 'Oanh', 'Phúc']) ps.push(await asParticipant(n));
+        const id = await seed(ps[0].participant.id);
+        const [b, a] = await venueIds(id);
+        const c = await createVenue({ name: 'Quán Chay C', address: '3 Trần Phú', mapsUrl: null });
+        const id2 = await createOuting({
+          date: '2030-05-18', sitTime: '18:30', closeTime: '16:00',
+          venueIds: [a!, b!, c.id], organizerId: ps[0].participant.id,
+        });
+        for (const p of ps) await setAnswer(id2, p.participant.id, true);
+        await castVote(id2, ps[0].participant.id, a!);
+        await castVote(id2, ps[1].participant.id, a!);
+        await castVote(id2, ps[2].participant.id, b!);
+        await castVote(id2, ps[3].participant.id, b!);
+        await castVote(id2, ps[4].participant.id, c.id);
+        const line = leadLine(await get(id2, ps[0].headers));
+        expect(line).toContain('Quán Ốc Đào');
+        expect(line).toContain('Bia Hơi Hà Nội');
+        expect(line).not.toContain('Quán Chay C');
+      });
+
+      it('shows "Chưa có phiếu" and no leader for a new outing', async () => {
+        const lan = await asParticipant('Lan');
+        const id = await seed(lan.participant.id);
+        const html = await get(id, lan.headers);
+        expect(html).toContain('Chưa có phiếu');
+        expect(html).not.toContain('Đang dẫn đầu');
+      });
+
+      it('follows the votes when the only voter switches to Not going', async () => {
+        const lan = await asParticipant('Lan');
+        const id = await seed(lan.participant.id);
+        const [, a] = await venueIds(id);
+        await setAnswer(id, lan.participant.id, true);
+        await castVote(id, lan.participant.id, a!);
+        let html = await get(id, lan.headers);
+        expect(leadLine(html)).toContain('Quán Ốc Đào');
+        await setAnswer(id, lan.participant.id, false);
+        html = await get(id, lan.headers);
+        expect(html).toContain('Chưa có phiếu');
+        expect(html).not.toContain('Đang dẫn đầu');
+      });
     });
   });
 });

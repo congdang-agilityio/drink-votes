@@ -5,6 +5,7 @@ import { getVote, getVoteCounts } from '../db/votes.js';
 import type { IdentityEnv } from '../middleware/identity.js';
 import { answer } from './answer.js';
 import { vote } from './vote.js';
+import { leadingVenues } from '../services/leading.js';
 import { OutingNotFound, OutingPage } from '../views/outing-page.js';
 
 export const outing = new Hono<IdentityEnv>();
@@ -24,6 +25,7 @@ outing.get('/outings/:id{[0-9a-f-]{36}}', async (c) => {
     `<!DOCTYPE html>${(<OutingPage
         outing={found} attendance={attendance} myAnswer={myAnswer}
         counts={counts}
+        leaders={leadingVenues(counts)}
         myVote={myVote}
       />)}`,
   );

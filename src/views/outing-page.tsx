@@ -28,16 +28,19 @@ export function OutingPage({
   attendance,
   myAnswer,
   counts,
+  leaders,
   myVote,
 }: {
   outing: OutingView;
   attendance: Attendance;
   myAnswer: boolean | null;
   counts: VenueCount[];
+  leaders: string[];
   myVote: string | null;
 }) {
   const countOf = (venueId: string): number =>
     counts.find((c) => c.venueId === venueId)?.count ?? 0;
+  const leaderNames = outing.venues.filter((v) => leaders.includes(v.id)).map((v) => v.name);
   return (
     <Layout title="Kèo nhậu">
       <h1>Kèo nhậu</h1>
@@ -50,6 +53,9 @@ export function OutingPage({
         <dd>{formatTime(outing.closeTime)}</dd>
       </dl>
       <h2>Quán</h2>
+      <p class="leading">
+        {leaderNames.length > 0 ? `Đang dẫn đầu: ${leaderNames.join(', ')}` : 'Chưa có phiếu'}
+      </p>
       <style dangerouslySetInnerHTML={{ __html: voteCss }} />
       <ul class="venue-list">
         {outing.venues.map((v) => (
