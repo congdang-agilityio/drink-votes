@@ -2,7 +2,7 @@ import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { createApp } from '../app.js';
 import { setAnswer } from '../db/attendance.js';
 import { createOuting, getOuting } from '../db/outings.js';
-import { closePool } from '../db/pool.js';
+import { closePool, getPool } from '../db/pool.js';
 import { createVenue } from '../db/venues.js';
 import { castVote } from '../db/votes.js';
 import { resetDb } from '../test/db.js';
@@ -326,5 +326,58 @@ describe('GET /outings/:id', () => {
         expect(html).not.toContain('Đang dẫn đầu');
       });
     });
+  });
+});
+
+describe('GET /outings/:id when closed', () => {
+  beforeEach(async () => {
+    await resetDb();
+  });
+
+  async function close(id: string, winnerName: string | null) {
+    const winner = winnerName
+      ? (await getOuting(id))!.venues.find((v) => v.name === winnerName)!.id
+      : null;
+    await getPool().query(
+      'UPDATE outings SET closed_at = now(), winner_venue_id = $2 WHERE id = $1',
+      [id, winner],
+    );
+  }
+
+  it('shows the closed label, winner and no answer or vote forms', async () => {
+    const { participant, headers } = await asParticipant('Lan');
+    const id = await seed(participant.id);
+    await setAnswer(id, participant.id, true);
+    await close(id, 'Quán Ốc Đào');
+    const res = await createApp().request(`/outings/${id}`, { headers });
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    expect(html).toContain('17/05/2030');
+    expect(html).toContain('18:30');
+    expect(html).toContain('Đã chốt');
+    expect(html).toContain('Quán: Quán Ốc Đào');
+    expect(html).not.toContain('/answer');
+    expect(html).not.toContain('/vote');
+    expect(html).not.toContain('<form');
+  });
+
+  it('shows the label without a winner line when no winner is set', async () => {
+    const { participant, headers } = await asParticipant('Lan');
+    const id = await seed(participant.id);
+    await close(id, null);
+    const html = await (await createApp().request(`/outings/${id}`, { headers })).text();
+    expect(html).toContain('Đã chốt');
+    expect(html).not.toContain('Quán:');
+    expect(html).not.toContain('<form');
+  });
+
+  it('keeps the open page with its buttons while not closed', async () => {
+    const { participant, headers } = await asParticipant('Lan');
+    const id = await seed(participant.id);
+    await setAnswer(id, participant.id, true);
+    const html = await (await createApp().request(`/outings/${id}`, { headers })).text();
+    expect(html).not.toContain('Đã chốt');
+    expect(html).toContain('/answer');
+    expect(html).toContain('/vote');
   });
 });
