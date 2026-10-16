@@ -45,6 +45,9 @@ describe('outings store', () => {
       sitTime: '18:30',
       closeTime: '16:00',
       organizerId: organizer.id,
+      closedAt: null,
+      cancelled: false,
+      winnerVenueId: null,
       venues: [b, a],
     });
   });
@@ -137,5 +140,64 @@ describe('outings store', () => {
       "SELECT indexdef FROM pg_indexes WHERE tablename = 'outings'",
     );
     expect(rows.map((r) => r.indexdef).join('\n')).toMatch(/\(outing_date, sit_time\)/);
+  });
+
+  describe('close state', () => {
+    async function seed() {
+      const organizer = await createParticipant('Lan');
+      const a = await createVenue({ name: 'A', address: 'a' });
+      const b = await createVenue({ name: 'B', address: 'b' });
+      const id = await createOuting({
+        date: '2030-05-17',
+        sitTime: '18:30',
+        closeTime: '16:00',
+        venueIds: [a.id],
+        organizerId: organizer.id,
+      });
+      return { id, a, b };
+    }
+    const update = (id: string, set: string, params: unknown[] = []) =>
+      getPool().query(`UPDATE outings SET ${set} WHERE id = $1`, [id, ...params]);
+
+    it('returns the close fields of a closed outing with a winner', async () => {
+      const { id, a } = await seed();
+      await update(id, 'closed_at = $2, winner_venue_id = $3', ['2030-05-17T09:00:00Z', a.id]);
+      const outing = await getOuting(id);
+      expect(outing?.closedAt).toEqual(new Date('2030-05-17T09:00:00Z'));
+      expect(outing?.cancelled).toBe(false);
+      expect(outing?.winnerVenueId).toBe(a.id);
+    });
+
+    it('rejects an open outing with a winner', async () => {
+      const { id, a } = await seed();
+      await expect(update(id, 'winner_venue_id = $2', [a.id])).rejects.toThrow(
+        /outings_open_state_check/,
+      );
+    });
+
+    it('rejects an open outing that is cancelled', async () => {
+      const { id } = await seed();
+      await expect(update(id, 'cancelled = true')).rejects.toThrow(/outings_open_state_check/);
+    });
+
+    it('rejects a cancelled outing with a winner', async () => {
+      const { id, a } = await seed();
+      await expect(
+        update(id, 'closed_at = now(), cancelled = true, winner_venue_id = $2', [a.id]),
+      ).rejects.toThrow(/outings_cancelled_no_winner_check/);
+    });
+
+    it('accepts a cancelled outing without a winner', async () => {
+      const { id } = await seed();
+      await update(id, 'closed_at = now(), cancelled = true');
+      expect((await getOuting(id))?.cancelled).toBe(true);
+    });
+
+    it('rejects a winner that is not one of the outing venues', async () => {
+      const { id, b } = await seed();
+      await expect(update(id, 'closed_at = now(), winner_venue_id = $2', [b.id])).rejects.toThrow(
+        /outings_winner_venue_fk/,
+      );
+    });
   });
 });
