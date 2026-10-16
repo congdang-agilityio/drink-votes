@@ -1,5 +1,7 @@
 import { Hono } from 'hono';
 import { getOuting } from '../db/outings.js';
+import { recordVisit } from '../db/visits.js';
+import { isReached } from '../lib/time.js';
 import type { IdentityEnv } from '../middleware/identity.js';
 import { chooseWinner } from '../db/ties.js';
 import { closeOuting } from '../services/closing.js';
@@ -68,5 +70,46 @@ organizer.post('/outings/:id{[0-9a-f-]{36}}/choose', async (c) => {
   if (!(await chooseWinner(id, venueId))) {
     return c.html(`<!DOCTYPE html>${(<CannotChoose outingId={id} />)}`, 409);
   }
+  return c.redirect(`/outings/${id}`, 303);
+});
+
+/** A refused visit answer (409): a Vietnamese reason with a link back. */
+function CannotConfirmVisit({ outingId, reason }: { outingId: string; reason: string }) {
+  return (
+    <Layout title="Chưa thể xác nhận">
+      <h1>Chưa thể xác nhận</h1>
+      <p>{reason}</p>
+      <p>
+        <a href={`/outings/${outingId}`}>Quay lại kèo</a>
+      </p>
+    </Layout>
+  );
+}
+
+/**
+ * Records the organizer's final "Đã đi" (visited=yes) or "Không đi" (visited=no) answer for a
+ * closed outing with a winner, from its sitting time on (no deadline). Open, cancelled, waiting
+ * or already answered outings are refused; the store refuses a concurrent second answer.
+ */
+organizer.post('/outings/:id{[0-9a-f-]{36}}/visit', async (c) => {
+  const id = c.req.param('id');
+  const found = await getOuting(id);
+  if (!found) return c.html(`<!DOCTYPE html>${(<OutingNotFound />)}`, 404);
+  const visited = (await c.req.parseBody())['visited'];
+  if (visited !== 'yes' && visited !== 'no') return c.text('Câu trả lời không hợp lệ.', 400);
+  if (c.var.participant.id !== found.organizerId) {
+    const page = <NotOrganizer outingId={id} action="xác nhận đã đi hay không" />;
+    return c.html(`<!DOCTYPE html>${page}`, 403);
+  }
+  const conflict = (reason: string) =>
+    c.html(`<!DOCTYPE html>${(<CannotConfirmVisit outingId={id} reason={reason} />)}`, 409);
+  if (!found.closedAt || found.cancelled || !found.winnerVenueId) {
+    return conflict('Kèo chưa có quán thắng nên không thể xác nhận đã đi.');
+  }
+  if (found.visited !== null) return conflict('Kèo này đã được xác nhận rồi.');
+  if (!isReached(found.date, found.sitTime)) {
+    return conflict('Chỉ xác nhận được từ giờ ngồi của kèo.');
+  }
+  if (!(await recordVisit(id, visited === 'yes'))) return conflict('Kèo này đã được xác nhận rồi.');
   return c.redirect(`/outings/${id}`, 303);
 });
