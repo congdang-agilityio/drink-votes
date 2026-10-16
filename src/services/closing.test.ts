@@ -4,6 +4,7 @@ import { setAnswer } from '../db/attendance.js';
 import { createOuting, getOuting } from '../db/outings.js';
 import { createParticipant } from '../db/participants.js';
 import { closePool, getPool } from '../db/pool.js';
+import { getTiedVenues } from '../db/ties.js';
 import { createVenue } from '../db/venues.js';
 import { castVote } from '../db/votes.js';
 import { resetDb } from '../test/db.js';
@@ -330,6 +331,56 @@ describe('closing service', () => {
         cancelled: true,
         winnerVenueId: null,
       });
+    });
+  });
+
+  describe('venues still tied at close (#115)', () => {
+    const opts = { now: CLOSE_INSTANT, tz: TZ, minPeople: MIN };
+
+    it('two never visited venues tied: closed, no winner, both stored as tied', async () => {
+      const { outingId, v: [a, b, c] } = await outingWith(3);
+      await pastWin(c, '2026-10-01', true);
+      await vote(outingId, [a, b, a, b]);
+      expect(await closeOuting(outingId, opts)).toMatchObject({
+        cancelled: false,
+        winnerVenueId: null,
+        changed: true,
+      });
+      expect(await getTiedVenues(outingId)).toEqual([a, b]);
+    });
+
+    it('same last visit date: both tied (sweep)', async () => {
+      const { outingId, v: [a, b] } = await outingWith(2);
+      await pastWin(a, '2026-10-01', true);
+      await pastWin(b, '2026-10-01', true);
+      await vote(outingId, [a, b, a, b]);
+      expect(await closeDueOutings(opts)).toEqual([outingId]);
+      const outing = await getOuting(outingId);
+      expect(outing?.closedAt).toEqual(CLOSE_INSTANT);
+      expect(outing?.winnerVenueId).toBeNull();
+      expect(await getTiedVenues(outingId)).toEqual([a, b]);
+    });
+
+    it('no votes with two never visited venues: both tied', async () => {
+      const { outingId, v: [a, b] } = await outingWith(2);
+      await goingOnly(outingId, MIN);
+      expect(await closeDueOutings(opts)).toEqual([outingId]);
+      expect((await getOuting(outingId))?.winnerVenueId).toBeNull();
+      expect(await getTiedVenues(outingId)).toEqual([a, b]);
+    });
+
+    it('a cancelled outing stores no ties', async () => {
+      const { outingId, v: [a, b] } = await outingWith(2);
+      await vote(outingId, [a, b]);
+      expect((await closeOuting(outingId, opts))?.cancelled).toBe(true);
+      expect(await getTiedVenues(outingId)).toEqual([]);
+    });
+
+    it('a winner stores no ties', async () => {
+      const { outingId, v: [a, b] } = await outingWith(2);
+      await vote(outingId, [a, a, b]);
+      expect((await closeOuting(outingId, opts))?.winnerVenueId).toBe(a);
+      expect(await getTiedVenues(outingId)).toEqual([]);
     });
   });
 });
