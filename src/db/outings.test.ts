@@ -48,6 +48,7 @@ describe('outings store', () => {
       closedAt: null,
       cancelled: false,
       winnerVenueId: null,
+      visited: null,
       venues: [b, a],
     });
   });
