@@ -1,4 +1,4 @@
-import { afterAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../app.js';
 import { config } from '../config.js';
 import { closePool, getPool } from '../db/pool.js';
@@ -124,5 +124,72 @@ describe('create outing', () => {
     expect(await res.text()).toContain('role="alert"');
     const { rows } = await getPool().query('SELECT id FROM outings');
     expect(rows).toHaveLength(0);
+  });
+  describe('business rules', () => {
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    const submit = async (
+      fields: { date: string; sitTime?: string; closeTime?: string },
+      venueCount: number,
+    ) => {
+      const { headers } = await asParticipant();
+      const params = new URLSearchParams([
+        ['date', fields.date],
+        ['sitTime', fields.sitTime ?? '18:30'],
+        ['closeTime', fields.closeTime ?? '16:00'],
+      ]);
+      for (let i = 0; i < venueCount; i++) {
+        const v = await createVenue({ name: `Quán ${i}`, address: `${i} Phố` });
+        params.append('venueIds', v.id);
+      }
+      return post(headers, params);
+    };
+    const count = async () =>
+      (await getPool().query('SELECT id FROM outings')).rows.length;
+
+    it.each([0, 1])('refuses %i venue(s)', async (n) => {
+      vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-10-15T05:00:00Z') });
+      const res = await submit({ date: '2026-10-15' }, n);
+      expect(res.status).toBe(400);
+      expect(await res.text()).toContain('ít nhất 2 quán');
+      expect(await count()).toBe(0);
+    });
+
+    it('refuses a past date and keeps the entered values', async () => {
+      vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-10-15T05:00:00Z') });
+      const res = await submit({ date: '2026-10-14', sitTime: '19:15', closeTime: '17:05' }, 2);
+      expect(res.status).toBe(400);
+      const html = await res.text();
+      expect(html).toContain('Ngày không được ở trong quá khứ');
+      expect(html).toContain('value="2026-10-14"');
+      expect(html).toContain('value="19:15"');
+      expect(html).toContain('value="17:05"');
+      expect((html.match(/checked/g) ?? []).length).toBe(2);
+      expect(await count()).toBe(0);
+    });
+
+    it.each(['18:30', '19:00'])('refuses close time %s with sitting 18:30', async (closeTime) => {
+      vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-10-15T05:00:00Z') });
+      const res = await submit({ date: '2026-10-15', sitTime: '18:30', closeTime }, 2);
+      expect(res.status).toBe(400);
+      expect(await res.text()).toContain('Giờ chốt phải trước giờ ngồi');
+      expect(await count()).toBe(0);
+    });
+
+    it('allows today', async () => {
+      vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-10-15T05:00:00Z') });
+      const res = await submit({ date: '2026-10-15' }, 2);
+      expect(res.status).toBe(303);
+      expect(await count()).toBe(1);
+    });
+
+    it('uses Vietnam time for today', async () => {
+      vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-10-14T20:00:00Z') });
+      const res = await submit({ date: '2026-10-15' }, 2);
+      expect(res.status).toBe(303);
+      expect(await count()).toBe(1);
+    });
   });
 });
