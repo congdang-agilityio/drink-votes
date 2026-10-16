@@ -142,6 +142,13 @@ describe('outings store', () => {
     expect(rows.map((r) => r.indexdef).join('\n')).toMatch(/\(outing_date, sit_time\)/);
   });
 
+  it('indexes open outings by date and close time', async () => {
+    const { rows } = await getPool().query(
+      "SELECT indexdef FROM pg_indexes WHERE tablename = 'outings' AND indexname = 'outings_open_idx'",
+    );
+    expect(rows[0]?.indexdef).toMatch(/\(outing_date, close_time\) WHERE \(closed_at IS NULL\)/);
+  });
+
   describe('close state', () => {
     async function seed() {
       const organizer = await createParticipant('Lan');
