@@ -1,3 +1,4 @@
+import type { Queryable } from './attendance.js';
 import { getPool } from './pool.js';
 
 /** Outcome of a vote: stored, refused because the person is not Going, or not an outing venue. */
@@ -67,10 +68,16 @@ export async function castVote(
   }
 }
 
-/** Vote count for every venue of the outing (0 included), in outing order. */
-export async function getVoteCounts(outingId: string): Promise<VenueCount[]> {
+/**
+ * Vote count for every venue of the outing (0 included), in outing order. Pass `db` to read
+ * inside the caller's transaction.
+ */
+export async function getVoteCounts(
+  outingId: string,
+  db: Queryable = getPool(),
+): Promise<VenueCount[]> {
   if (!isUuid(outingId)) return [];
-  const { rows } = await getPool().query<{ venue_id: string; count: number }>(
+  const { rows } = await db.query<{ venue_id: string; count: number }>(
     `SELECT ov.venue_id, count(v.participant_id)::int AS count
        FROM outing_venues ov
        LEFT JOIN votes v ON v.outing_id = ov.outing_id AND v.venue_id = ov.venue_id
