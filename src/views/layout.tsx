@@ -27,6 +27,13 @@ main { width: 100%; max-width: 40rem; margin: 0 auto; padding: 1rem; }
 h1, h2 { line-height: 1.25; }
 `;
 
+/** A POST-only URL has no page to return to: use the outing page, or the home page. */
+function returnPath(method: string, url: URL): string {
+  if (method === 'GET' || method === 'HEAD') return url.pathname + url.search;
+  const outing = /^\/outings\/([^/]+)\/(?:close|choose|visit)\/?$/.exec(url.pathname);
+  return outing ? `/outings/${outing[1]}` : '/';
+}
+
 /** The viewer of the current request, or null outside a request or before a name is set. */
 function currentParticipant(): { name: string; path: string } | null {
   try {
@@ -34,7 +41,7 @@ function currentParticipant(): { name: string; path: string } | null {
     const participant = c.var.participant;
     if (!participant) return null;
     const url = new URL(c.req.url);
-    return { name: participant.displayName, path: url.pathname + url.search };
+    return { name: participant.displayName, path: returnPath(c.req.method, url) };
   } catch {
     return null;
   }

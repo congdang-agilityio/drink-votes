@@ -89,6 +89,7 @@ describe('POST /outings/:id/close', () => {
     expect(res.status).toBe(403);
     const html = await res.text();
     expect(html).toContain('Chỉ người tạo kèo mới được chốt kèo.');
+    expect(html).toContain(`href="/me/name?next=%2Foutings%2F${s.id}"`);
     expect(html).toContain(`href="/outings/${s.id}"`);
     expect((await getOuting(s.id))?.closedAt).toBeNull();
   });
@@ -199,7 +200,9 @@ describe('POST /outings/:id/choose', () => {
 
     const res = await choose(s.id, s.a, org.headers);
     expect(res.status).toBe(409);
-    expect(await res.text()).toContain('Không thể chọn quán');
+    const html = await res.text();
+    expect(html).toContain('Không thể chọn quán');
+    expect(html).toContain(`href="/me/name?next=%2Foutings%2F${s.id}"`);
     expect((await getOuting(s.id))?.winnerVenueId).toBe(s.b);
   });
 
@@ -221,6 +224,7 @@ describe('POST /outings/:id/choose', () => {
     expect(res.status).toBe(403);
     const html = await res.text();
     expect(html).toContain('Chỉ người tạo kèo mới được chọn quán.');
+    expect(html).toContain(`href="/me/name?next=%2Foutings%2F${s.id}"`);
     expect(html).toContain(`href="/outings/${s.id}"`);
     expect((await getOuting(s.id))?.winnerVenueId).toBeNull();
   });
@@ -340,6 +344,7 @@ describe('POST /outings/:id/visit', () => {
     expect(res.status).toBe(403);
     const html = await res.text();
     expect(html).toContain('Chỉ người tạo kèo mới được xác nhận đã đi hay không.');
+    expect(html).toContain(`href="/me/name?next=%2Foutings%2F${s.id}"`);
     expect(html).toContain(`href="/outings/${s.id}"`);
     expect((await getOuting(s.id))?.visited).toBeNull();
   });
@@ -358,7 +363,9 @@ describe('POST /outings/:id/visit', () => {
     at(BEFORE_SIT_TIME);
     const res = await visit(s.id, 'yes', org.headers);
     expect(res.status).toBe(409);
-    expect(await res.text()).toContain('Chưa thể xác nhận');
+    const html = await res.text();
+    expect(html).toContain('Chưa thể xác nhận');
+    expect(html).toContain(`href="/me/name?next=%2Foutings%2F${s.id}"`);
     expect((await getOuting(s.id))?.visited).toBeNull();
   });
 
