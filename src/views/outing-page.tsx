@@ -56,7 +56,11 @@ export function OutingPage({
       </dl>
       <h2>Quán</h2>
       <p class="leading">
-        {leaderNames.length > 0 ? `Đang dẫn đầu: ${leaderNames.join(', ')}` : 'Chưa có phiếu'}
+        {leaderNames.length === 0
+          ? 'Chưa có phiếu'
+          : leaderNames.length === 1
+            ? `Đang dẫn đầu: ${leaderNames[0]}`
+            : `Hoà: ${leaderNames.join(', ')} – chủ kèo sẽ chọn`}
       </p>
       <style dangerouslySetInnerHTML={{ __html: voteCss }} />
       <ul class="venue-list">

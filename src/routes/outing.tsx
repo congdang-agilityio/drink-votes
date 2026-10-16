@@ -6,6 +6,7 @@ import type { IdentityEnv } from '../middleware/identity.js';
 import { answer } from './answer.js';
 import { organizer } from './organizer.js';
 import { vote } from './vote.js';
+import { lastVisitDates } from '../db/visits.js';
 import { leadingVenues } from '../services/leading.js';
 import { CancelledOutingPage } from '../views/cancelled-outing.js';
 import { ClosedOutingPage } from '../views/closed-outing.js';
@@ -40,11 +41,12 @@ outing.get('/outings/:id{[0-9a-f-]{36}}', async (c) => {
     getVoteCounts(found.id),
     getVote(found.id, c.var.participant.id),
   ]);
+  const lastVisits = await lastVisitDates(found.venues.map((v) => v.id));
   return c.html(
     `<!DOCTYPE html>${(<OutingPage
         outing={found} attendance={attendance} myAnswer={myAnswer}
         counts={counts}
-        leaders={leadingVenues(counts)}
+        leaders={leadingVenues(counts, lastVisits)}
         myVote={myVote}
         isOrganizer={found.organizerId === c.var.participant.id}
       />)}`,
