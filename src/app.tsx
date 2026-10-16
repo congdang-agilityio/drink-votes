@@ -3,6 +3,7 @@ import { contextStorage } from 'hono/context-storage';
 import { identity, type IdentityEnv } from './middleware/identity.js';
 import { healthRoute } from './routes/health.js';
 import { changeName } from './routes/change-name.js';
+import { history } from './routes/history.js';
 import { home } from './routes/home.js';
 import { name } from './routes/name.js';
 import { outing } from './routes/outing.js';
@@ -20,6 +21,7 @@ export function createApp(): Hono<IdentityEnv> {
   // Every page below needs a known participant (c.var.participant).
   app.use('*', identity);
   app.route('/', home);
+  app.route('/', history);
   // Before outing: it only matches uuid ids, but keep the literal path first.
   app.route('/', outings);
   app.route('/', outing);

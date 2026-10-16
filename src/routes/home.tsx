@@ -19,6 +19,9 @@ home.get("/", async (c) => {
         <p>
           <a href="/outings/new">Tạo kèo</a>
         </p>
+        <p>
+          <a href="/history">Lịch sử</a>
+        </p>
         <UpcomingOutings outings={outings} />
       </Layout>
     )}`,
