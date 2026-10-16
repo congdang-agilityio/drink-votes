@@ -2,7 +2,7 @@ import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { setAnswer } from '../db/attendance.js';
 import { createOuting, getOuting } from '../db/outings.js';
 import { createParticipant } from '../db/participants.js';
-import { closePool } from '../db/pool.js';
+import { closePool, getPool } from '../db/pool.js';
 import { createVenue } from '../db/venues.js';
 import { castVote } from '../db/votes.js';
 import { resetDb } from '../test/db.js';
@@ -35,12 +35,28 @@ async function newOuting(date = '2026-10-20'): Promise<Setup> {
   return { outingId, a: a.id, b: b.id };
 }
 
-/** Each venue id gets one Going voter per occurrence. */
+/** Each venue id gets one Going voter per occurrence, voting at 15:59 (before the close). */
 async function vote(outingId: string, venueIds: string[]): Promise<void> {
+  const before = { now: AT_1559, tz: TZ };
   for (const venueId of venueIds) {
     const p = await createParticipant(`P ${Math.random()}`);
-    await setAnswer(outingId, p.id, true);
-    expect(await castVote(outingId, p.id, venueId)).toBe('ok');
+    expect(await setAnswer(outingId, p.id, true, undefined, before)).toBe('ok');
+    expect(await castVote(outingId, p.id, venueId, before)).toBe('ok');
+  }
+}
+
+/** Writes Going voters straight to the tables, bypassing the close check of castVote. */
+async function forceVotes(outingId: string, venueIds: string[]): Promise<void> {
+  for (const venueId of venueIds) {
+    const p = await createParticipant(`P ${Math.random()}`);
+    await getPool().query(
+      'INSERT INTO attendance (outing_id, participant_id, going) VALUES ($1, $2, true)',
+      [outingId, p.id],
+    );
+    await getPool().query(
+      'INSERT INTO votes (outing_id, participant_id, venue_id) VALUES ($1, $2, $3)',
+      [outingId, p.id, venueId],
+    );
   }
 }
 
@@ -117,7 +133,7 @@ describe('closing service', () => {
     });
 
     // More votes after the close would change the leader if the close ran again.
-    await vote(s.outingId, [s.b, s.b]);
+    await forceVotes(s.outingId, [s.b, s.b]);
     const later = new Date('2026-10-20T10:00:00Z');
     const second = await closeOuting(s.outingId, { now: later, tz: TZ });
     expect(second).toEqual({ ...first, changed: false });
