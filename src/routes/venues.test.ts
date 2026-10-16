@@ -48,7 +48,7 @@ describe('/venues', () => {
     const html = await venuesPage(headers);
     expect(html).toContain('<!DOCTYPE html>');
     expect(html).toMatch(/<header class="site-header"/);
-    expect(html).toContain('<title>Danh sách quán · Drink Votes</title>');
+    expect(html).toContain('<title>Danh sách quán · Drink Tonight</title>');
     expect(html).toMatch(/<form[^>]*method="post"[^>]*action="\/venues"/);
     for (const label of ['Tên quán', 'Địa chỉ', 'Link Google Maps', 'Ghi chú']) {
       expect(html).toContain(`>${label}</label>`);
@@ -176,7 +176,7 @@ describe('/venues', () => {
     expect(res.status).toBe(400);
     const body = await res.text();
     expect(body).toContain(message);
-    expect(body).toContain('<title>Danh sách quán · Drink Votes</title>');
+    expect(body).toContain('<title>Danh sách quán · Drink Tonight</title>');
     const html = await venuesPage(headers);
     expect(html).toContain('Chưa có quán nào.');
     expect(html).not.toContain(fields[field]);

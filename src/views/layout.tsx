@@ -2,7 +2,7 @@ import { getContext } from 'hono/context-storage';
 import type { Child } from 'hono/jsx';
 import type { IdentityEnv } from '../middleware/identity.js';
 
-const PRODUCT_NAME = 'Drink Votes';
+const PRODUCT_NAME = 'Drink Tonight';
 
 const css = `
 *, *::before, *::after { box-sizing: border-box; }
