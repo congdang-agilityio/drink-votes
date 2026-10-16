@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { createVenue, DuplicateVenueNameError, listVenues } from '../db/venues.js';
+import { createVenue, DuplicateVenueNameError, listVenuesWithVisits } from '../db/venues.js';
 import type { IdentityEnv } from '../middleware/identity.js';
 import {
   DUPLICATE_VENUE_NAME_MESSAGE,
@@ -14,7 +14,7 @@ export const venues = new Hono<IdentityEnv>();
 const field = (value: unknown): string => (typeof value === 'string' ? value : '');
 
 const page = async (form: { values?: VenueFormValues; errors?: VenueFormErrors } = {}) =>
-  `<!DOCTYPE html>${(<VenuesPage venues={await listVenues()} {...form} />)}`;
+  `<!DOCTYPE html>${(<VenuesPage venues={await listVenuesWithVisits()} {...form} />)}`;
 
 venues.get('/venues', async (c) => c.html(await page()));
 

@@ -1,7 +1,15 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { resetDb } from '../test/db.js';
 import { closePool, getPool } from './pool.js';
-import { createVenue, DuplicateVenueNameError, listVenues, venueNameKey } from './venues.js';
+import { createOuting } from './outings.js';
+import { createParticipant } from './participants.js';
+import {
+  createVenue,
+  DuplicateVenueNameError,
+  listVenues,
+  listVenuesWithVisits,
+  venueNameKey,
+} from './venues.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
@@ -109,5 +117,56 @@ describe('venues store', () => {
       expect((rejected[0] as PromiseRejectedResult).reason).toBeInstanceOf(DuplicateVenueNameError);
       expect(await listVenues()).toHaveLength(1);
     });
+  });
+});
+
+describe('listVenuesWithVisits', () => {
+  beforeEach(async () => {
+    await resetDb();
+  });
+
+  afterAll(async () => {
+    await closePool();
+  });
+
+  async function outing(venueId: string, state: string) {
+    const organizer = await createParticipant('Lan');
+    const id = await createOuting({
+      date: '2026-12-31',
+      sitTime: '18:30',
+      closeTime: '16:00',
+      venueIds: [venueId],
+      organizerId: organizer.id,
+    });
+    await getPool().query(`UPDATE outings SET ${state} WHERE id = $1 AND $2::uuid IS NOT NULL`, [id, venueId]);
+  }
+  const won = 'closed_at = now(), winner_venue_id = $2';
+  const countOf = async (name: string) =>
+    (await listVenuesWithVisits()).find((v) => v.name === name)?.visitCount;
+
+  it('counts outings won and confirmed as visited, and 0 when none', async () => {
+    const a = await createVenue({ name: 'A', address: '1' });
+    await createVenue({ name: 'B', address: '2' });
+    await outing(a.id, `${won}, visited = true`);
+    await outing(a.id, `${won}, visited = true`);
+    expect(await countOf('A')).toBe(2);
+    expect(await countOf('B')).toBe(0);
+    expect(await listVenues()).toHaveLength(2);
+  });
+
+  it('counts only "Đã đi" among visited, not visited, and unanswered', async () => {
+    const a = await createVenue({ name: 'A', address: '1' });
+    await outing(a.id, `${won}, visited = true`);
+    await outing(a.id, `${won}, visited = false`);
+    await outing(a.id, won);
+    expect(await countOf('A')).toBe(1);
+  });
+
+  it('does not count cancelled or waiting outings that included the venue', async () => {
+    const a = await createVenue({ name: 'A', address: '1' });
+    await outing(a.id, 'closed_at = now(), cancelled = true');
+    await outing(a.id, 'closed_at = now()');
+    await outing(a.id, 'cancelled = false');
+    expect(await countOf('A')).toBe(0);
   });
 });

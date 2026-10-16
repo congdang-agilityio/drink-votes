@@ -80,3 +80,19 @@ export async function listVenues(): Promise<Venue[]> {
   );
   return rows.map(toVenue);
 }
+
+export interface VenueWithVisits extends Venue {
+  /** Outings this venue won that the organizer confirmed with "Đã đi". */
+  visitCount: number;
+}
+
+/** Every venue as in listVenues, with how many outings it won that were visited (0 when none). */
+export async function listVenuesWithVisits(): Promise<VenueWithVisits[]> {
+  const { rows } = await getPool().query<VenueRow & { visit_count: number }>(
+    `SELECT v.id, v.name, v.address, v.maps_url, v.notes,
+            (SELECT count(*)::int FROM outings o
+              WHERE o.winner_venue_id = v.id AND o.visited = true) AS visit_count
+       FROM venues v ORDER BY v.created_at, v.name`,
+  );
+  return rows.map((row) => ({ ...toVenue(row), visitCount: row.visit_count }));
+}

@@ -1,6 +1,9 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { createApp } from '../app.js';
-import { closePool } from '../db/pool.js';
+import { createOuting } from '../db/outings.js';
+import { closePool, getPool } from '../db/pool.js';
+import { recordVisit } from '../db/visits.js';
+import { createVenue } from '../db/venues.js';
 import { resetDb } from '../test/db.js';
 import { asParticipant } from '../test/identity.js';
 import { VENUE_FIELD_MAX_LENGTH } from '../services/venue-rules.js';
@@ -35,6 +38,29 @@ describe('/venues', () => {
 
   afterAll(async () => {
     await closePool();
+  });
+
+  it('shows the visit count per venue and updates it after "Đã đi"', async () => {
+    const { participant, headers } = await asParticipant('Lan');
+    const a = await createVenue({ name: 'Quán Có', address: '1' });
+    await createVenue({ name: 'Quán Không', address: '2' });
+    const id = await createOuting({
+      date: '2026-12-31',
+      sitTime: '18:30',
+      closeTime: '16:00',
+      venueIds: [a.id],
+      organizerId: participant.id,
+    });
+    await getPool().query('UPDATE outings SET closed_at = now(), winner_venue_id = $2 WHERE id = $1', [id, a.id]);
+
+    let html = await venuesPage(headers);
+    expect(itemFor(html, 'Quán Có')).toContain('Đã đi 0 lần');
+    expect(itemFor(html, 'Quán Không')).toContain('Đã đi 0 lần');
+
+    await recordVisit(id, true);
+    html = await venuesPage(headers);
+    expect(itemFor(html, 'Quán Có')).toContain('Đã đi 1 lần');
+    expect(itemFor(html, 'Quán Không')).toContain('Đã đi 0 lần');
   });
 
   it('links to /venues from the home page in Vietnamese', async () => {
