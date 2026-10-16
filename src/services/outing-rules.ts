@@ -1,9 +1,11 @@
 import { config } from "../config.js";
-import { todayIn } from "../lib/time.js";
+import { isReached, todayIn } from "../lib/time.js";
 
 export const VENUES_MESSAGE = "Cần chọn ít nhất 2 quán.";
 export const PAST_DATE_MESSAGE = "Ngày không được ở trong quá khứ.";
 export const CLOSE_TIME_MESSAGE = "Giờ chốt phải trước giờ ngồi.";
+
+export const CLOSE_TIME_PASSED_MESSAGE = "Giờ chốt đã qua.";
 
 export interface NewOutingInput {
   date: string;
@@ -25,5 +27,12 @@ export function validateNewOuting(
   if (new Set(input.venueIds).size < 2) errors.venues = VENUES_MESSAGE;
   if (input.date < todayIn(tz, now)) errors.date = PAST_DATE_MESSAGE;
   if (input.closeTime >= input.sitTime) errors.closeTime = CLOSE_TIME_MESSAGE;
+  if (
+    !errors.closeTime &&
+    input.date === todayIn(tz, now) &&
+    isReached(input.date, input.closeTime, { tz, now })
+  ) {
+    errors.closeTime = CLOSE_TIME_PASSED_MESSAGE;
+  }
   return Object.keys(errors).length > 0 ? { ok: false, errors } : { ok: true };
 }

@@ -19,6 +19,10 @@ describe('create outing', () => {
     await resetDb();
   });
 
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   afterAll(async () => {
     await closePool();
   });
@@ -58,6 +62,7 @@ describe('create outing', () => {
   });
 
   it('creates the outing, records the organizer and redirects to its page', async () => {
+    vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-10-15T05:00:00Z') });
     const { participant, headers } = await asParticipant();
     const a = await createVenue({ name: 'Quán A', address: '1 A' });
     const b = await createVenue({ name: 'Quán B', address: '2 B' });
@@ -87,6 +92,7 @@ describe('create outing', () => {
   });
 
   it('ignores a duplicated venue id instead of failing', async () => {
+    vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-10-15T05:00:00Z') });
     const { headers } = await asParticipant();
     const a = await createVenue({ name: 'Quán A', address: '1 A' });
     const b = await createVenue({ name: 'Quán B', address: '2 B' });
@@ -183,6 +189,14 @@ describe('create outing', () => {
       const res = await submit({ date: '2026-10-15' }, 2);
       expect(res.status).toBe(303);
       expect(await count()).toBe(1);
+    });
+
+    it('refuses today with a close time that has passed and creates nothing', async () => {
+      vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-10-20T09:30:00Z') });
+      const res = await submit({ date: '2026-10-20', sitTime: '18:30', closeTime: '16:00' }, 2);
+      expect(res.status).toBe(400);
+      expect(await res.text()).toContain('Giờ chốt đã qua.');
+      expect(await count()).toBe(0);
     });
 
     it('uses Vietnam time for today', async () => {

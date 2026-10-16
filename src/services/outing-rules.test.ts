@@ -44,8 +44,8 @@ describe("validateNewOuting", () => {
     });
   });
 
-  it("accepts a close time already passed today", () => {
-    expect(validateNewOuting({ ...base, closeTime: "08:00" }, { now })).toEqual({ ok: true });
+  it("accepts a close time that is still ahead today", () => {
+    expect(validateNewOuting({ ...base, closeTime: "10:30" }, { now })).toEqual({ ok: true });
   });
 
   it("returns several errors at once", () => {
@@ -55,5 +55,44 @@ describe("validateNewOuting", () => {
         { now },
       ),
     ).toEqual({ ok: false, errors: { venues: VENUES, date: DATE, closeTime: CLOSE } });
+  });
+
+  describe("close time already passed", () => {
+    const CLOSE_PASSED = "Giờ chốt đã qua.";
+    // 16:30 on 20/10 in Vietnam
+    const at1630 = new Date("2026-10-20T09:30:00Z");
+    const input = { ...base, date: "2026-10-20", closeTime: "16:00", sitTime: "18:30" };
+
+    it("refuses today's outing closing in the past", () => {
+      expect(validateNewOuting(input, { now: at1630 })).toEqual({
+        ok: false,
+        errors: { closeTime: CLOSE_PASSED },
+      });
+    });
+    it("accepts today's outing when the close time is still ahead", () => {
+      const at1500 = new Date("2026-10-20T08:00:00Z");
+      expect(validateNewOuting(input, { now: at1500 })).toEqual({ ok: true });
+    });
+    it("accepts a future date", () => {
+      expect(validateNewOuting({ ...input, date: "2026-10-21" }, { now: at1630 })).toEqual({ ok: true });
+    });
+    it("refuses a close time equal to now", () => {
+      expect(validateNewOuting({ ...input, closeTime: "16:30" }, { now: at1630 })).toEqual({
+        ok: false,
+        errors: { closeTime: CLOSE_PASSED },
+      });
+    });
+    it("keeps the close-before-sitting message first", () => {
+      expect(validateNewOuting({ ...input, closeTime: "18:30" }, { now: at1630 })).toEqual({
+        ok: false,
+        errors: { closeTime: CLOSE },
+      });
+    });
+    it("keeps only the past-date message for a past date", () => {
+      expect(validateNewOuting({ ...input, date: "2026-10-19" }, { now: at1630 })).toEqual({
+        ok: false,
+        errors: { date: DATE },
+      });
+    });
   });
 });

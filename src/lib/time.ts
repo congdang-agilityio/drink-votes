@@ -12,6 +12,29 @@ export function todayIn(tz: string = config.appTz, now: Date = new Date()): stri
   return `${get('year')}-${get('month')}-${get('day')}`;
 }
 
+/** Current time (HH:mm, 24-hour) in the given time zone. */
+export function nowTimeIn(tz: string = config.appTz, now: Date = new Date()): string {
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: tz,
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(now);
+  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? '';
+  return `${get('hour')}:${get('minute')}`;
+}
+
+/** Whether now is at or after date (YYYY-MM-DD) + time (HH:mm) in the given zone. */
+export function isReached(
+  date: string,
+  time: string,
+  { tz = config.appTz, now = new Date() }: { tz?: string; now?: Date } = {},
+): boolean {
+  const today = todayIn(tz, now);
+  if (today !== date) return today > date;
+  return nowTimeIn(tz, now) >= time;
+}
+
 /** Whether s is a real calendar date written YYYY-MM-DD. */
 export function isValidDate(s: string): boolean {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
