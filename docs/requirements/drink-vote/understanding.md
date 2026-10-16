@@ -1,73 +1,139 @@
-# Drink Votes: how the BA understands it (round 4, final, for sign-off)
+# Drink Votes: how the BA understands it (M1 signed off 2026-10-15; M2 ready for confirmation, 2026-10-16)
 
-All M1 questions are answered (Q-01 to Q-15, Q-21 to Q-24). The M2-only questions are
-postponed until M2 starts, as you agreed. Please check that the summary below matches what you want.
+All questions are answered, for M1 and for M2 (Q-16 to Q-20 and Q-25 to Q-36). M1 is signed off
+and does not change. This page presents **M2 "Rules of play" (Luật chơi)** in full so you can
+confirm it. A short reminder of M1 is at the end.
 
-**What it is.** **Drink Votes** is a small web app that helps a team pick a place to drink in
-the evening. Each invitation becomes an **outing (kèo)**: a date, a few venues to vote on, a
-close time and a headcount. The organizer shares the outing's link in the team chat. The name
-"Drink Votes" appears in the page title and header. All screens are in Vietnamese; times look
-like 18:30 and dates like 15/10/2026. Every page must also be comfortable on a phone screen
-(the same pages adjust to the screen width; there is no separate mobile app).
+---
 
-**Who uses it.** One shared, open space for your team: anyone with the address can see and use
-all venues and outings. The organizer (người rủ / chủ kèo) creates the outing and picks the
-venues; the app remembers the organizer by the browser they used. The organizer is not marked
-Going automatically and answers like everyone else. There are no accounts: the first time you
-open any page, the app asks your name and the browser remembers it. You can change your name
-later, and the new name then shows everywhere, including outings you already answered. Two
-people may use the same name; the app treats them as different people.
+## M2 "Rules of play": what it adds and changes
 
-**M1 "Tonight's outing" (build first).**
-- **Home page:** outings dated today or later, soonest first; each line shows the date, the
-  sitting time and how many are going. Links to "Create outing" and "Venues". Older outings drop
-  off the list but still open from their link.
-- **Venues:** anyone can add a venue and see the list. Name and address are required; the Google
-  Maps link and notes are optional, and the app does not check the Maps link. A venue whose
-  name already exists is refused ("A venue with this name already exists", shown in Vietnamese),
-  ignoring upper/lower case. Venues cannot be edited or deleted in M1.
-- **Create an outing:** date, sitting time (default 18:30), close time (default 16:00) and the
-  venues to vote on. The app refuses fewer than 2 venues, a date before today, or a close time
-  that is not before the sitting time. Each outing has its own link. An outing cannot be
-  changed after it is created; you create a new one instead.
-- **On the outing:** say Going / Not going; if you are Going, vote for one venue. You can change
-  your answer and your vote at any time. If you switch from Going to Not going, your vote is
-  removed; if you switch back to Going, you vote again.
-- **The outing page shows** how many are going and their names (people who said Not going or
-  have not answered are not listed), the number of votes per venue (nobody sees who voted for
-  what), and the leading venue. If several venues share the top count, all of them are shown as
-  leading. Before anyone votes, no venue is leading and the page says "Chưa có phiếu" (No votes
-  yet). The close time is displayed.
-- **Outings never close in M1.** Nothing happens at the close time. The organizer books a
-  table based on what the page shows when they look.
-- A health check address for the hosting platform.
+**1. Outings now close.**
+- **Automatic close:** each outing closes by itself at its close time, Vietnam time, on the
+  outing's own date. After that nobody can change Going / Not going or their vote. "Change at
+  any time" from M1 becomes "change while the outing is open".
+- **Early close:** the organizer can close the outing before the close time. The same rules
+  apply as for the automatic close.
+- **Not enough people:** if fewer than 3 people are going at any close (automatic or early), the
+  outing is cancelled ("không đủ quân"). The number 3 is a setting.
 
-**M2 "Rules of play" (later).**
-- The outing closes by itself at the close time (Vietnam time), and then nothing can change.
-  The organizer (the browser that created the outing) can close it early.
-- If fewer than 3 people are going at close, the outing is cancelled ("not enough people").
-- On a tied vote, the venue visited longest ago wins; venues never visited come first.
-- A history of closed outings, and how many times each venue was visited.
-- Postponed until M2 starts (you agreed): early close and cancellation (Q-16), a tie that is
-  still tied (Q-17), what "visited" means (Q-18), how cancelled and closed outings look (Q-19,
-  Q-20), the organizer on another device (Q-25), old M1 outings when M2 ships (Q-26).
+**2. How the winner is decided at close.**
+- The venue with the most votes wins.
+- If several venues are tied, the venue visited longest ago wins; a venue never visited comes
+  first.
+- If 3 or more are going but nobody voted, all venues of the outing count as tied and the same
+  rule applies.
+- If venues are still tied after that (for example several never visited), the **organizer
+  chooses** the winner among them.
 
-**Not included.** Login, permissions, multiple teams, bill splitting, booking through the
-venue's app, Slack/email notifications, maps, a separate mobile app. Also not in M1: closing
-an outing, editing an outing, editing or deleting venues, an English version of the screens,
-showing who voted for which venue or who said Not going.
+**3. The outing page while it is open.**
+- The leading venue uses the same rule (most votes, then the tie-break). Normally one venue is
+  shown.
+- If the tie-break still leaves several venues tied, all of them are shown as leading with a
+  note, for example "Hoà: Quán A, Quán B – chủ kèo sẽ chọn".
+- Before anyone votes, the page still says "Chưa có phiếu" with no leading venue, as in M1.
+- This replaces the M1 display where all tied venues were shown as leading.
 
-**Small details the BA assumed (tell us if any is wrong).**
-- When checking for a duplicate venue name, spaces at the start or end are ignored ("Quán A "
-  equals "Quán A"). Names that differ only in Vietnamese accents ("Quán Ốc" and "Quan Oc") count
-  as different names, because you asked to ignore upper/lower case only.
-- The health check reports a problem when the database is down (only the "all fine" case is
-  described in the README).
+**4. The outing page after it closes.** There are three possible endings.
+- **Closed with a winner:** a "Closed" label, the winning venue with its address and Google
+  Maps link, the final headcount, the names of the people who were going, and the number of
+  votes per venue (still anonymous). The Going / Not going and vote buttons are gone.
+- **Closed, waiting for the organizer:** when venues are still tied at close, the page shows
+  "Closed – waiting for the organizer to choose" with the tied venues. Only the organizer sees
+  the buttons to choose. There is no deadline: if the organizer never chooses, the outing never
+  gets a winner and never counts as a visit.
+- **Cancelled:** "Cancelled: not enough people" with the final headcount; the buttons are gone.
 
-**Known trade-offs you accepted.**
-- No login: anyone can answer under any name, or vote twice from two browsers.
-- M1 gives no final result; the organizer decides when to look and book.
-- Venues cannot be fixed or removed in M1, so a typo (or a misspelled second entry for the
-  same place) stays in the list.
+**5. "Visited" means confirmed by the organizer.**
+- Once the outing has a winner and its sitting time has passed, the organizer sees
+  "Đã đi <venue> chưa?" with "Đã đi" (We went) and "Không đi" (We did not go).
+- There is no deadline. Only "Đã đi" counts as a visit (the visit date is the outing's date).
+  "Không đi" never counts, and neither does an outing the organizer never answered.
+- Only "Đã đi" visits are used for the tie-break and for the visit counts.
 
-**What is still unclear.** Nothing for M1.
+**6. Organizer actions.** Early close, choosing among tied venues, and confirming the visit.
+They work only in the browser that created the outing. On another phone or computer, or after
+clearing browser data, the organizer cannot do them. There is no "organizer link".
+
+**7. Home page.** The list now shows only **open** outings dated today or later, soonest first
+(date, sitting time, number going, as in M1). As soon as an outing closes or is cancelled, it
+leaves the list; it still opens from its link and from the History page. The home page gets a
+new link to the History page, next to "Create outing" and "Venues".
+
+**8. History page (Lịch sử) and visit counts.**
+- A new History page, linked from the home page, lists closed outings, newest first.
+- Each line shows the date, the venue and the number of people, with a mark: "Đã đi" (went),
+  "Chưa xác nhận" (not confirmed) or "Không đi" (did not go). An outing still waiting for the
+  organizer's choice shows "chưa chọn quán" instead of a venue.
+- Cancelled outings are listed too, marked as cancelled, with their final headcount.
+- The existing Venues page shows next to each venue how many times it was visited (0 for a
+  venue never visited). Only "Đã đi" outings count.
+
+**9. Creating an outing.** In addition to the M1 checks, the app refuses an outing whose close
+time has already passed when you create it (for example creating at 17:00 an outing for today
+with close time 16:00), with the message "The close time has already passed" (shown in
+Vietnamese).
+
+**10. Old M1 outings.** When M2 is released, every M1 outing whose close time has passed is
+closed with the M2 rules (cancelled if fewer than 3 going, otherwise a winner, or waiting for
+the organizer's choice) and appears in the History page.
+
+## Small details the BA assumed for M2 (please confirm or correct each one)
+
+- **A-08:** The close time applies on the outing's own date (an outing on 20/10 with close time
+  16:00 closes at 16:00 on 20/10, Vietnam time).
+- **A-09:** Closing is final: a closed or cancelled outing cannot be reopened.
+- **A-10:** The organizer's choice among tied venues and the visit confirmation ("Đã đi" /
+  "Không đi") are final once made; they cannot be changed afterwards.
+- **A-11:** When M2 starts, no venue has a confirmed visit yet, so every venue counts as "never
+  visited". As a result, most ties at first (including in old M1 outings closed at release) will
+  be decided by the organizer's choice. For old M1 outings, the organizer is the browser that
+  created them in M1, and it can also confirm the visit.
+- **A-12:** The organizer does not need to be Going to close early, choose a venue or confirm the
+  visit.
+- **A-13:** While an outing waits for the organizer's choice, its page also shows the final
+  headcount, the names of the people who were going and the votes per venue, like a closed
+  outing page. Once the organizer chooses, it becomes the normal closed page.
+- **A-14:** In the History page, an outing still waiting for the organizer's choice is marked
+  "Chưa xác nhận" (it cannot be confirmed before it has a winner).
+- **A-15 (new, from your last answers):** In the History page, "newest first" means by the
+  outing's date, latest date first, and tapping a line opens that outing's page. Because closed
+  outings leave the home page, this is how people, and the organizer (to choose a venue or
+  confirm the visit), get back to a closed outing without its original link.
+
+## Not included in M2
+
+- A deadline or automatic fallback when the organizer never chooses among tied venues or never
+  confirms the visit.
+- Any way to recover organizer actions on another device (no "organizer link").
+- Showing closed or cancelled outings on the home page (they are in the History page).
+- Still out of the product: login, permissions, multiple teams, bill splitting, booking through
+  the venue's app, Slack/email notifications, maps, a separate mobile app.
+
+## Known trade-offs you accepted in M2
+
+- If the organizer forgets, or loses the browser that created the outing, tied outings stay
+  without a winner and visits stay unconfirmed, with no deadline and no automatic fallback.
+  Visit counts can then be lower than reality, and the History page shows "chưa chọn quán" or
+  "Chưa xác nhận" for those outings.
+- No login: anyone can answer under any name, or vote twice from two browsers (unchanged from M1).
+
+## What is still unclear
+
+Nothing. If the summary and the assumptions A-08 to A-15 are right, M2 is ready for your
+confirmation.
+
+---
+
+## Reminder: M1 "Tonight's outing" (signed off 2026-10-15, unchanged)
+
+Drink Votes is a small web app, in Vietnamese, usable on a phone, where a team picks a place to
+drink. No accounts: the app asks your name on the first visit and remembers your browser; you
+can change your name later and it changes everywhere. Anyone can add venues (name and address
+required, duplicate names refused, no editing or deleting). Anyone can create an outing (date,
+sitting time 18:30 by default, close time 16:00 by default, at least 2 venues, no past date,
+close time before sitting time; no editing afterwards), share its link, say Going / Not going
+and, if Going, vote for one venue. The outing page shows the headcount, the names of people
+going, anonymous vote counts and the leading venue(s), or "Chưa có phiếu" before any vote. The
+home page lists outings from today on, soonest first, with links to "Create outing" and
+"Venues". In M1 outings never close. M2 above changes the parts noted there.
