@@ -46,6 +46,7 @@ outing.get('/outings/:id{[0-9a-f-]{36}}', async (c) => {
         counts={counts}
         leaders={leadingVenues(counts)}
         myVote={myVote}
+        isOrganizer={found.organizerId === c.var.participant.id}
       />)}`,
   );
 });

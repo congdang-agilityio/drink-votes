@@ -475,4 +475,18 @@ describe('GET /outings/:id when cancelled', () => {
     expect(html).toContain('Đã huỷ: không đủ quân');
     expect(html).toContain('Số người đi: 0');
   });
+
+  it('shows the close form only to the organizer of an open outing', async () => {
+    const org = await asParticipant('Minh');
+    const other = await asParticipant('Lan');
+    const id = await seed(org.participant.id);
+    const get = async (headers: Record<string, string>) =>
+      (await createApp().request(`/outings/${id}`, { headers })).text();
+    const orgHtml = await get(org.headers);
+    expect(orgHtml).toContain(`action="/outings/${id}/close"`);
+    expect(orgHtml).toContain('Chốt ngay');
+    const otherHtml = await get(other.headers);
+    expect(otherHtml).not.toContain('/close');
+    expect(otherHtml).not.toContain('Chốt ngay');
+  });
 });
