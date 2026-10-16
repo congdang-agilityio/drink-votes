@@ -3,6 +3,7 @@ import type { VenueCount } from '../db/votes.js';
 import type { Outing } from '../db/outings.js';
 import { formatDate, formatTime } from '../lib/time.js';
 import { Layout } from './layout.js';
+import { VisitQuestion } from './visit-question.js';
 
 export type ClosedOutingView = Pick<
   Outing,
@@ -16,10 +17,13 @@ export function ClosedOutingPage({
   outing,
   attendance,
   counts,
+  askVisit = false,
 }: {
   outing: ClosedOutingView;
   attendance: Attendance;
   counts: VenueCount[];
+  /** Show the organizer's visit question (decided by the route). */
+  askVisit?: boolean;
 }) {
   const countOf = (venueId: string): number =>
     counts.find((c) => c.venueId === venueId)?.count ?? 0;
@@ -53,6 +57,7 @@ export function ClosedOutingPage({
           ) : null}
         </div>
       ) : null}
+      {askVisit && winner ? <VisitQuestion outingId={outing.id} venueName={winner.name} /> : null}
       <h2>Số phiếu</h2>
       <ul class="venue-list">
         {outing.venues.map((v) => (
