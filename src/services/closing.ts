@@ -119,7 +119,7 @@ export async function closeOuting(
  * Closes every open outing whose close instant (outing_date + close_time in tz) is at or before
  * now, oldest close first, one transaction per outing. Returns the ids this call closed;
  * concurrent sweeps skip rows another sweep holds and re-check closed_at under the lock, so no
- * outing is closed twice.
+ * outing is closed twice. An outing that fails to close is logged (id and error) and skipped.
  */
 export async function closeDueOutings({
   now = new Date(),
@@ -134,10 +134,16 @@ export async function closeDueOutings({
   );
   const closed: string[] = [];
   for (const { id } of rows) {
-    const state = await inTransaction((client) =>
-      closeLocked(client, id, now, tz, minPeople, true),
-    );
-    if (state?.changed) closed.push(id);
+    try {
+      const state = await inTransaction((client) =>
+        closeLocked(client, id, now, tz, minPeople, true),
+      );
+      if (state?.changed) closed.push(id);
+    } catch (err) {
+      // One failing outing must not stop the others (nor fail the page request): it is left
+      // open and retried by the next sweep.
+      console.error(`closeDueOutings: could not close outing ${id}`, err);
+    }
   }
   return closed;
 }

@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { contextStorage } from 'hono/context-storage';
+import { closeDue } from './middleware/close-due.js';
 import { identity, type IdentityEnv } from './middleware/identity.js';
 import { healthRoute } from './routes/health.js';
 import { changeName } from './routes/change-name.js';
@@ -16,6 +17,8 @@ export function createApp(): Hono<IdentityEnv> {
   app.use('*', contextStorage());
   // Before any page middleware: the health check must never be redirected.
   app.route('/', healthRoute());
+  // After the health check, before any page: an outing past its close time is closed first.
+  app.use('*', closeDue);
   app.route('/', name);
   // Every page below needs a known participant (c.var.participant).
   app.use('*', identity);

@@ -1,4 +1,4 @@
-import { afterAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { config } from '../config.js';
 import { setAnswer } from '../db/attendance.js';
 import { createOuting, getOuting } from '../db/outings.js';
@@ -382,5 +382,36 @@ describe('closing service', () => {
       expect((await closeOuting(outingId, opts))?.winnerVenueId).toBe(a);
       expect(await getTiedVenues(outingId)).toEqual([]);
     });
+  });
+
+  it('logs a failing outing and still closes the others', async () => {
+    const bad = await newOuting();
+    const good = await newOuting('2026-10-21');
+    await getPool().query(`
+      CREATE OR REPLACE FUNCTION fail_close() RETURNS trigger AS $$
+      BEGIN
+        IF NEW.id = '${bad.outingId}' THEN RAISE EXCEPTION 'boom'; END IF;
+        RETURN NEW;
+      END $$ LANGUAGE plpgsql`);
+    await getPool().query(
+      'CREATE TRIGGER fail_close BEFORE UPDATE ON outings FOR EACH ROW EXECUTE FUNCTION fail_close()',
+    );
+    const log = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      const closed = await closeDueOutings({
+        now: new Date('2026-10-22T00:00:00Z'),
+        tz: TZ,
+        minPeople: NO_MIN,
+      });
+      expect(closed).toEqual([good.outingId]);
+      expect(log).toHaveBeenCalledTimes(1);
+      expect(String(log.mock.calls[0][0])).toContain(bad.outingId);
+      expect((await getOuting(bad.outingId))?.closedAt).toBeNull();
+      expect((await getOuting(good.outingId))?.closedAt).not.toBeNull();
+    } finally {
+      log.mockRestore();
+      await getPool().query('DROP TRIGGER fail_close ON outings');
+      await getPool().query('DROP FUNCTION fail_close()');
+    }
   });
 });
