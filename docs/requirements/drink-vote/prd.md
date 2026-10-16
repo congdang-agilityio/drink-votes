@@ -121,3 +121,111 @@ no tie-break and no history (all M2).
 10. S-10: Show the leading venue(s)
 11. S-11: Upcoming outings on the home page
 12. S-12: Change my display name
+
+---
+
+# PRD: Drink Votes, M2 "Rules of play" (Luật chơi)
+
+- Slug: `drink-vote` · Analysis: `requirements.md` (M2 re-signed 2026-10-16 by Cong Dang) · Version: 2
+- Epic title: Drink Votes M2: Rules of play (epic file `epic-m2.md`; stories S-13..S-25)
+
+## M2.1 Summary
+M2 gives every outing a real end. It closes automatically at its close time on its own date
+(Vietnam time) or earlier by the organizer; afterwards answers and votes are frozen and it
+cannot be reopened. Fewer than `MIN_PEOPLE` (3) Going at close cancels it ("không đủ quân").
+Otherwise the most-voted venue wins; ties (and "no votes") go to the venue not visited for the
+longest time, and remaining ties are chosen by the organizer. After the sitting time the
+organizer confirms the visit ("Đã đi" / "Không đi"); only confirmed visits count. A History
+page, visit counts on the Venues page and an open-only home list complete the milestone.
+
+## M2.2 Goals and success metrics
+| Goal | Metric | Target |
+|---|---|---|
+| A fixed decision at the close time | Outing closed at its close time; no changes after (FR-11) | Every outing closes on time; changes after close refused |
+| No booking for too few people | Outings under `MIN_PEOPLE` cancelled (FR-13) | Always, for every kind of close |
+| One venue per outing | Winner by votes, tie-break, then organizer choice (FR-14, FR-22) | Every non-cancelled outing has a winner or a visible "waiting" state |
+| Variety of venues | Tie-break by least recently visited (FR-14), visit counts (FR-16) | Only "Đã đi" visits count |
+| Look back at past outings | History page (FR-15) | Every closed and cancelled outing listed, newest first |
+
+## M2.3 Users
+- Organizer: closes early, chooses among tied venues, confirms the visit; only from the
+  creating browser, no recovery (FR-12, FR-18, Q-25). Does not need to be Going (A-12).
+- Member: answers and votes while the outing is open; sees the result, history and visit counts.
+
+## M2.4 Scope
+- **In this release (M2):** FR-11 automatic close; FR-12 early close and organizer actions;
+  FR-13 cancellation; FR-14 tie-break; FR-15 History page; FR-16 visit counts; FR-22 organizer
+  choice among remaining ties; FR-23 visit confirmation; FR-24 closing M1 outings at release;
+  FR-25 live leading venue with tie-break; FR-26 cancelled page; FR-27 closed page; FR-28 refuse
+  creation after the close time; FR-29 home page lists open outings only, links to History.
+- **M2 changes to M1 behaviour:** FR-03 (visit counts), FR-04 (extra check), FR-06 / FR-08
+  (only while open), FR-09 (replaced by FR-25 / FR-27 / FR-22 / FR-26), FR-17 (open outings
+  only, History link), FR-20 (replaced by FR-11).
+- **Out of M2:** closed or cancelled outings on the home page (Q-29); a deadline or automatic
+  fallback for the organizer's choice or visit confirmation (Q-34, Q-35); recovering organizer
+  actions on another device (Q-25). Everything out of M1 that M2 does not mention stays out
+  (editing/deleting venues, editing outings, English UI, showing who voted for what).
+
+## M2.5 Requirements
+| ID | Summary | Decided by |
+|---|---|---|
+| FR-11 | Automatic close at close time on the outing's date; frozen, final | SRC-1, Q-28, Q-31, A-08, A-09 |
+| FR-12 | Organizer early close; organizer-only actions from the creating browser | Q-02, Q-16, Q-17, Q-18, Q-25 |
+| FR-13 | Cancel below `MIN_PEOPLE` at any close | Q-16 |
+| FR-14 | Tie-break by least recently visited; no votes = all tied | Q-17, Q-18, Q-28 |
+| FR-15 | History page, newest first, with marks | Q-19, Q-26, Q-30, Q-36, A-14, A-15 |
+| FR-16 | Visit counts on the Venues page, "Đã đi" only | Q-18, Q-30, Q-35, Q-36 |
+| FR-22 | Waiting state; organizer chooses among remaining ties; no deadline | Q-17, Q-34, A-10, A-13 |
+| FR-23 | Visit confirmation "Đã đi" / "Không đi" from the sitting time | Q-18, Q-35, A-10 |
+| FR-24 | M1 outings past close time closed with M2 rules at release | Q-26, A-11 |
+| FR-25 | Live leading venue with tie-break; tie note; "Chưa có phiếu" | Q-27, Q-32, Q-33 |
+| FR-26 | Cancelled page with final headcount; history entry | Q-19 |
+| FR-27 | Closed page: winner, address, Maps link, headcount, names, counts | Q-20 |
+| FR-28 | Refuse creating an outing past its close time | Q-31 |
+| FR-29 | Home page: open outings only; History link | Q-21, Q-29, Q-30 |
+
+## M2.6 Key decisions
+| Question | Decision |
+|---|---|
+| Q-16 | Cancellation below `MIN_PEOPLE` applies to early close too |
+| Q-17 | Venues still tied after the tie-break: the organizer chooses |
+| Q-18 | A visit counts only when the organizer confirms the team went; visit date = outing date |
+| Q-19 | Cancelled page with final headcount; listed in history as cancelled |
+| Q-20 | Closed page with winner, address, Maps link, headcount, Going names, vote counts |
+| Q-25 | Organizer actions only from the creating browser; no recovery |
+| Q-26 | M1 outings past their close time are closed with M2 rules at release, in history |
+| Q-27 | Tie-break applied live while open |
+| Q-28 | No votes at close with enough people = tie between all included venues |
+| Q-29 | Home page lists open outings only |
+| Q-30 | History page linked from home, newest first; visit counts on the Venues page (0 if never) |
+| Q-31 | Creating an outing whose close time has passed is refused |
+| Q-32 | Live remaining ties shown as leading with "chủ kèo sẽ chọn" |
+| Q-33 | Live, no votes: keep "Chưa có phiếu" |
+| Q-34 | "Waiting for the organizer to choose", no deadline |
+| Q-35 | "Đã đi" / "Không đi" from the sitting time, no deadline |
+| Q-36 | History lists all closed outings with marks; counts from "Đã đi" only |
+
+## M2.7 Assumptions and risks
+- Assumptions accepted at the M2 re-sign: A-08 (close on the outing's own date, Vietnam time),
+  A-09 (closing is final), A-10 (choice and visit confirmation are final), A-11 (old M1 outings:
+  no visits yet, ties go to the M1 organizer's browser), A-12 (organizer need not be Going),
+  A-13 (waiting page shows headcount, names, counts), A-14 (waiting outings in history:
+  "chưa chọn quán", "Chưa xác nhận"), A-15 (history by outing date, newest first; each line
+  opens the outing).
+- Risks: R-06 organizer actions tied to one browser (ties stay unchosen, visits unconfirmed;
+  accepted); R-01 cookie-only identity; R-04 M2 results for old outings rely on M1 data.
+
+## M2.8 Story map
+1. S-13: Outing closes automatically at its close time
+2. S-14: Closed outing page with the result
+3. S-15: Cancel an outing when not enough people are going
+4. S-16: Organizer closes the outing early
+5. S-17: Organizer confirms whether the team went
+6. S-18: Break a tie at close by the least recently visited venue
+7. S-19: Organizer chooses among venues still tied at close
+8. S-20: Leading venue with the tie-break while the outing is open
+9. S-21: History page of closed outings
+10. S-22: Visit counts on the Venues page
+11. S-23: Home page lists open outings only
+12. S-24: Refuse an outing whose close time has already passed
+13. S-25: Close old M1 outings with the M2 rules at release
