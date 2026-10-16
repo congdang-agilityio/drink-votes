@@ -1,6 +1,7 @@
 import type pg from 'pg';
 import { config } from '../config.js';
 import { getPool } from '../db/pool.js';
+import { lastVisitDates } from '../db/visits.js';
 import { getVoteCounts } from '../db/votes.js';
 import { decideOutcome } from './outcome.js';
 
@@ -46,7 +47,8 @@ async function inTransaction<T>(fn: (client: pg.PoolClient) => Promise<T>): Prom
 
 /**
  * Locks the outing row (always first, before attendance and votes) and closes it unless already
- * closed: closed_at is the close instant, or now when earlier (early close). With skipLocked, a
+ * closed: closed_at is the close instant, or now when earlier (early close). The winner comes
+ * from the votes and, on a tie, the venues' last confirmed visits. With skipLocked, a
  * row locked by another closer is skipped (null).
  */
 async function closeLocked(
@@ -80,10 +82,16 @@ async function closeLocked(
     'SELECT count(*)::int AS n FROM attendance WHERE outing_id = $1 AND going',
     [outingId],
   );
+  const counts = await getVoteCounts(outingId, client);
   const { cancelled, winnerVenueId } = decideOutcome({
-    counts: await getVoteCounts(outingId, client),
+    counts,
     goingCount: going[0].n,
     minPeople,
+    // Read on the closing client so the tie-break sees the same snapshot as the votes.
+    lastVisits: await lastVisitDates(
+      counts.map((c) => c.venueId),
+      client,
+    ),
   });
   const sql =
     'UPDATE outings SET closed_at = $2, cancelled = $3, winner_venue_id = $4 WHERE id = $1';

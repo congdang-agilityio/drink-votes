@@ -12,11 +12,12 @@ describe('decideOutcome', () => {
         ],
         goingCount: 6,
         minPeople: 3,
+        lastVisits: {},
       }),
-    ).toEqual({ cancelled: false, winnerVenueId: 'b' });
+    ).toEqual({ cancelled: false, winnerVenueId: 'b', tiedVenueIds: [] });
   });
 
-  it('returns null on a tie for the highest count', () => {
+  it('returns null and the tied ids on a tie the visits cannot break', () => {
     expect(
       decideOutcome({
         counts: [
@@ -26,11 +27,12 @@ describe('decideOutcome', () => {
         ],
         goingCount: 5,
         minPeople: 3,
+        lastVisits: {},
       }),
-    ).toEqual({ cancelled: false, winnerVenueId: null });
+    ).toEqual({ cancelled: false, winnerVenueId: null, tiedVenueIds: ['a', 'b'] });
   });
 
-  it('returns null when nobody voted', () => {
+  it('treats every venue as tied when nobody voted', () => {
     expect(
       decideOutcome({
         counts: [
@@ -39,35 +41,89 @@ describe('decideOutcome', () => {
         ],
         goingCount: 3,
         minPeople: 3,
+        lastVisits: {},
       }),
-    ).toEqual({ cancelled: false, winnerVenueId: null });
-    expect(decideOutcome({ counts: [], goingCount: 3, minPeople: 3 })).toEqual({
+    ).toEqual({ cancelled: false, winnerVenueId: null, tiedVenueIds: ['a', 'b'] });
+    expect(decideOutcome({ counts: [], goingCount: 3, minPeople: 3, lastVisits: {} })).toEqual({
       cancelled: false,
       winnerVenueId: null,
+      tiedVenueIds: [],
+    });
+  });
+
+  it('breaks a tie with the least recently visited venue', () => {
+    const counts = [
+      { venueId: 'a', count: 2 },
+      { venueId: 'b', count: 2 },
+    ];
+    expect(
+      decideOutcome({ counts, goingCount: 4, minPeople: 3, lastVisits: { a: '2026-10-01', b: null } }),
+    ).toEqual({ cancelled: false, winnerVenueId: 'b', tiedVenueIds: [] });
+    expect(
+      decideOutcome({
+        counts,
+        goingCount: 4,
+        minPeople: 3,
+        lastVisits: { a: '2026-09-01', b: '2026-10-01' },
+      }),
+    ).toEqual({ cancelled: false, winnerVenueId: 'a', tiedVenueIds: [] });
+  });
+
+  it('picks the oldest visit among all venues when nobody voted', () => {
+    const counts = ['a', 'b', 'c'].map((venueId) => ({ venueId, count: 0 }));
+    const lastVisits = { a: '2026-10-01', b: '2026-09-01', c: '2026-09-15' };
+    expect(decideOutcome({ counts, goingCount: 3, minPeople: 3, lastVisits }).winnerVenueId).toBe(
+      'b',
+    );
+  });
+
+  it('ignores visits when one venue leads the vote', () => {
+    const counts = [
+      { venueId: 'a', count: 3 },
+      { venueId: 'b', count: 1 },
+      { venueId: 'c', count: 1 },
+    ];
+    const lastVisits = { a: '2026-10-01', b: null, c: null };
+    expect(decideOutcome({ counts, goingCount: 5, minPeople: 3, lastVisits }).winnerVenueId).toBe(
+      'a',
+    );
+  });
+
+  it('cancels before the tie-break, with no tied ids', () => {
+    const counts = [
+      { venueId: 'a', count: 1 },
+      { venueId: 'b', count: 1 },
+    ];
+    expect(decideOutcome({ counts, goingCount: 2, minPeople: 3, lastVisits: { a: null } })).toEqual({
+      cancelled: true,
+      winnerVenueId: null,
+      tiedVenueIds: [],
     });
   });
 
   const lead = [{ venueId: 'a', count: 2 }];
 
   it('cancels with no winner when fewer than minPeople are going, even with a leader', () => {
-    expect(decideOutcome({ counts: lead, goingCount: 2, minPeople: 3 })).toEqual({
+    expect(decideOutcome({ counts: lead, goingCount: 2, minPeople: 3, lastVisits: {} })).toEqual({
       cancelled: true,
       winnerVenueId: null,
+      tiedVenueIds: [],
     });
   });
 
   it('does not cancel at exactly minPeople', () => {
-    expect(decideOutcome({ counts: lead, goingCount: 3, minPeople: 3 })).toEqual({
+    expect(decideOutcome({ counts: lead, goingCount: 3, minPeople: 3, lastVisits: {} })).toEqual({
       cancelled: false,
       winnerVenueId: 'a',
+      tiedVenueIds: [],
     });
   });
 
   it('cancels with 0 going', () => {
-    expect(decideOutcome({ counts: [], goingCount: 0, minPeople: 3 }).cancelled).toBe(true);
+    expect(decideOutcome({ counts: [], goingCount: 0, minPeople: 3, lastVisits: {} }).cancelled).toBe(true);
   });
 
   it('honours a larger minPeople', () => {
-    expect(decideOutcome({ counts: lead, goingCount: 4, minPeople: 5 }).cancelled).toBe(true);
+    expect(decideOutcome({ counts: lead, goingCount: 4, minPeople: 5, lastVisits: {} }).cancelled).toBe(true);
   });
 });

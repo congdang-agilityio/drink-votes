@@ -10,7 +10,7 @@ import { createOuting, getOuting } from './outings.js';
 import { createParticipant } from './participants.js';
 import { closePool, getPool } from './pool.js';
 import { createVenue } from './venues.js';
-import { recordVisit } from './visits.js';
+import { lastVisitDates, recordVisit } from './visits.js';
 
 async function setup() {
   const organizer = await createParticipant('Lan');
@@ -80,6 +80,69 @@ describe('visit store', () => {
     await expect(sql('UPDATE outings SET visited = true WHERE id = $1', [id])).rejects.toThrow(
       /outings_visited_needs_winner_check/,
     );
+  });
+
+  describe('lastVisitDates', () => {
+    /** A closed outing on `date` offering a and b, won by `winner`, with the visit answer. */
+    async function won(
+      date: string,
+      venues: [string, string],
+      winner: string,
+      visited: boolean | null,
+    ): Promise<string> {
+      const organizer = await createParticipant('Lan');
+      const id = await createOuting({
+        date,
+        sitTime: '18:30',
+        closeTime: '16:00',
+        venueIds: venues,
+        organizerId: organizer.id,
+      });
+      await sql(
+        'UPDATE outings SET closed_at = now(), winner_venue_id = $2, visited = $3 WHERE id = $1',
+        [id, winner, visited],
+      );
+      return id;
+    }
+
+    it('returns the latest "Đã đi" date per venue, or null', async () => {
+      const a = (await createVenue({ name: 'A', address: 'a' })).id;
+      const b = (await createVenue({ name: 'B', address: 'b' })).id;
+      await won('2026-09-01', [a, b], a, true);
+      await won('2026-10-01', [a, b], a, true);
+      expect(await lastVisitDates([a, b], getPool())).toEqual({ [a]: '2026-10-01', [b]: null });
+    });
+
+    it('ignores "Không đi", unanswered, waiting and cancelled outings', async () => {
+      const a = (await createVenue({ name: 'A', address: 'a' })).id;
+      const b = (await createVenue({ name: 'B', address: 'b' })).id;
+      await won('2026-09-01', [a, b], a, true);
+      await won('2026-10-01', [a, b], a, false);
+      await won('2026-10-02', [a, b], b, false);
+      await won('2026-10-03', [a, b], b, null);
+      const waiting = await createOuting({
+        date: '2026-10-04',
+        sitTime: '18:30',
+        closeTime: '16:00',
+        venueIds: [a, b],
+        organizerId: (await createParticipant('Lan')).id,
+      });
+      await sql('UPDATE outings SET closed_at = now() WHERE id = $1', [waiting]);
+      const cancelled = await createOuting({
+        date: '2026-10-05',
+        sitTime: '18:30',
+        closeTime: '16:00',
+        venueIds: [a, b],
+        organizerId: (await createParticipant('Lan')).id,
+      });
+      await sql('UPDATE outings SET closed_at = now(), cancelled = true WHERE id = $1', [cancelled]);
+      expect(await lastVisitDates([a, b], getPool())).toEqual({ [a]: '2026-09-01', [b]: null });
+    });
+
+    it('returns {} for no venues and rejects a malformed id', async () => {
+      expect(await lastVisitDates([], getPool())).toEqual({});
+      await expect(lastVisitDates(['nope'], getPool())).rejects.toThrow('invalid id');
+    });
   });
 });
 
