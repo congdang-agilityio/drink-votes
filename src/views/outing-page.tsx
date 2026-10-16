@@ -30,6 +30,7 @@ export function OutingPage({
   counts,
   leaders,
   myVote,
+  isOrganizer = false,
 }: {
   outing: OutingView;
   attendance: Attendance;
@@ -37,6 +38,7 @@ export function OutingPage({
   counts: VenueCount[];
   leaders: string[];
   myVote: string | null;
+  isOrganizer?: boolean;
 }) {
   const countOf = (venueId: string): number =>
     counts.find((c) => c.venueId === venueId)?.count ?? 0;
@@ -103,6 +105,11 @@ export function OutingPage({
           <li>{name}</li>
         ))}
       </ul>
+      {isOrganizer ? (
+        <form class="vote-form" method="post" action={`/outings/${outing.id}/close`}>
+          <button type="submit">Chốt ngay</button>
+        </form>
+      ) : null}
     </Layout>
   );
 }
