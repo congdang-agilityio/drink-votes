@@ -7,6 +7,7 @@ import type { IdentityEnv } from '../middleware/identity.js';
 import { answer } from './answer.js';
 import { organizer } from './organizer.js';
 import { vote } from './vote.js';
+import { isReached } from '../lib/time.js';
 import { lastVisitDates } from '../db/visits.js';
 import { leadingVenues } from '../services/leading.js';
 import { CancelledOutingPage } from '../views/cancelled-outing.js';
@@ -49,8 +50,13 @@ outing.get('/outings/:id{[0-9a-f-]{36}}', async (c) => {
       getAttendance(found.id),
       getVoteCounts(found.id),
     ]);
+    const askVisit =
+      found.organizerId === c.var.participant.id &&
+      found.winnerVenueId !== null &&
+      found.visited === null &&
+      isReached(found.date, found.sitTime);
     return c.html(
-      `<!DOCTYPE html>${(<ClosedOutingPage outing={found} attendance={attendance} counts={counts} />)}`,
+      `<!DOCTYPE html>${(<ClosedOutingPage outing={found} attendance={attendance} counts={counts} askVisit={askVisit} />)}`,
     );
   }
   const [attendance, myAnswer, counts, myVote] = await Promise.all([

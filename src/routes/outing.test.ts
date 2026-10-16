@@ -1,4 +1,4 @@
-import { afterAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../app.js';
 import { setAnswer } from '../db/attendance.js';
 import { createOuting, getOuting } from '../db/outings.js';
@@ -581,5 +581,86 @@ describe('GET /outings/:id when waiting for the organizer to choose', () => {
     expect(html).toContain('Quán: Quán B');
     expect(html).not.toContain('chờ chủ kèo');
     expect(html).not.toContain('<form');
+  });
+});
+
+describe('GET /outings/:id visit question', () => {
+  // seed(): date 2030-05-17, sit time 18:30 (Asia/Ho_Chi_Minh = UTC+7)
+  const AT_SIT_TIME = new Date('2030-05-17T11:30:00Z');
+  const BEFORE_SIT_TIME = new Date('2030-05-17T11:29:00Z');
+  const QUESTION = 'Đã đi Quán Ốc Đào chưa?';
+
+  beforeEach(async () => {
+    await resetDb();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  afterAll(async () => {
+    await closePool();
+  });
+
+  async function closedWithWinner(set = '') {
+    const org = await asParticipant('Minh');
+    const id = await seed(org.participant.id);
+    const { rows } = await getPool().query('SELECT id FROM venues WHERE name = $1', ['Quán Ốc Đào']);
+    await getPool().query(
+      `UPDATE outings SET closed_at = now(), winner_venue_id = $2${set} WHERE id = $1`,
+      [id, rows[0].id],
+    );
+    return { org, id };
+  }
+
+  const page = async (id: string, headers: Record<string, string>, now: Date) => {
+    vi.useFakeTimers({ toFake: ['Date'], now });
+    return (await createApp().request(`/outings/${id}`, { headers })).text();
+  };
+
+  it('organizer at the sitting time sees the question and both buttons', async () => {
+    const { org, id } = await closedWithWinner();
+    const html = await page(id, org.headers, AT_SIT_TIME);
+    expect(html).toContain(QUESTION);
+    expect(html).toContain(`action="/outings/${id}/visit"`);
+    expect(html).toContain('name="visited" value="yes"');
+    expect(html).toContain('name="visited" value="no"');
+    expect(html).toContain('Đã đi</button>');
+    expect(html).toContain('Không đi</button>');
+  });
+
+  it('organizer one minute before the sitting time does not see it', async () => {
+    const { org, id } = await closedWithWinner();
+    expect(await page(id, org.headers, BEFORE_SIT_TIME)).not.toContain(QUESTION);
+  });
+
+  it('another browser does not see it', async () => {
+    const { id } = await closedWithWinner();
+    const other = await asParticipant('Hoa');
+    const html = await page(id, other.headers, AT_SIT_TIME);
+    expect(html).not.toContain(QUESTION);
+    expect(html).not.toContain('/visit');
+  });
+
+  it('is gone after an answer, yes or no', async () => {
+    for (const v of ['true', 'false']) {
+      await resetDb();
+      const { org, id } = await closedWithWinner(`, visited = ${v}`);
+      const html = await page(id, org.headers, AT_SIT_TIME);
+      expect(html).not.toContain(QUESTION);
+      expect(html).not.toContain('/visit');
+    }
+  });
+
+  it('a cancelled outing shows no question', async () => {
+    const org = await asParticipant('Minh');
+    const id = await seed(org.participant.id);
+    await getPool().query('UPDATE outings SET closed_at = now(), cancelled = true WHERE id = $1', [id]);
+    expect(await page(id, org.headers, AT_SIT_TIME)).not.toContain('/visit');
+  });
+
+  it('an unanswered outing days later still shows it', async () => {
+    const { org, id } = await closedWithWinner();
+    expect(await page(id, org.headers, new Date('2030-06-30T02:00:00Z'))).toContain(QUESTION);
   });
 });
