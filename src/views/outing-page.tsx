@@ -10,14 +10,19 @@ const isHttpUrl = (url: string): boolean => /^https?:\/\//i.test(url);
 
 const answerCss = `
 .answer-form { display: flex; flex-wrap: wrap; gap: 0.5rem; }
-.answer-form button { flex: 1 1 8rem; min-height: 2.75rem; padding: 0.5rem 1rem; border: 2px solid #7b341e; border-radius: 0.5rem; background: #fff; color: #7b341e; cursor: pointer; }
-.answer-form button[aria-pressed="true"] { background: #7b341e; color: #fff; font-weight: 700; }
+.answer-form button { flex: 1 1 8rem; min-height: 2.75rem; padding: 0.5rem 1rem; border: 2px solid #7a3b1e; border-radius: 1rem; background: #fff; color: #7a3b1e; cursor: pointer; }
+.answer-form button[value="yes"] { background: #e6f4ea; border-color: #2e7d4f; color: #1f5a37; }
+.answer-form button[value="no"] { background: #fdeaea; border-color: #c62828; color: #a31f1f; }
+.answer-form button[value="yes"][aria-pressed="true"] { background: #2e7d4f; color: #fff; font-weight: 800; }
+.answer-form button[value="no"][aria-pressed="true"] { background: #c62828; color: #fff; font-weight: 800; }
 `;
 
 const voteCss = `
 .vote-count { display: block; font-weight: 700; }
-.vote-form button { min-height: 2.75rem; padding: 0.5rem 1rem; border: 2px solid #7b341e; border-radius: 0.5rem; background: #fff; color: #7b341e; cursor: pointer; }
-.venue-list li { margin-bottom: 0.75rem; }
+.vote-form button { min-height: 2.75rem; padding: 0.5rem 1rem; border: 0; border-radius: 1rem; background: #e8742a; color: #3b1f0e; font-weight: 700; cursor: pointer; }
+.vote-form button:hover { background: #f0a030; }
+.venue-list { list-style: none; padding: 0; }
+.venue-list li { background: #fff; border-radius: 1rem; box-shadow: 0 2px 8px rgba(122,59,30,.12); padding: 0.75rem 1rem; margin-bottom: 0.75rem; }
 `;
 
 const myAnswerText = (a: boolean | null): string =>

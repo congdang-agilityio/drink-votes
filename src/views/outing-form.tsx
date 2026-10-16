@@ -18,10 +18,11 @@ export interface OutingFormErrors {
 
 const css = `
 .outing-form label { display: block; font-weight: 600; margin-top: 0.75rem; }
-.outing-form input[type="date"], .outing-form input[type="time"] { width: 100%; padding: 0.5rem; }
-.outing-form fieldset { margin-top: 1rem; border: 1px solid #d9e2ec; border-radius: 0.5rem; }
+.outing-form input[type="date"], .outing-form input[type="time"] { width: 100%; padding: 0.5rem; border: 1px solid #d9b99a; border-radius: 0.5rem; background: #fff; color: inherit; }
+.outing-form fieldset { margin-top: 1rem; border: 1px solid #d9b99a; border-radius: 1rem; background: #fff; }
 .outing-form fieldset label { font-weight: 400; margin-top: 0.25rem; }
-.outing-form button { margin-top: 1rem; padding: 0.5rem 1rem; }
+.outing-form button { margin-top: 1rem; min-height: 2.75rem; padding: 0.5rem 1rem; border: 0; border-radius: 1rem; background: #e8742a; color: #3b1f0e; cursor: pointer; }
+.outing-form button:hover { background: #f0a030; }
 `;
 
 /** Form to create an outing; `values` and `errors` let a failed post re-render it. */

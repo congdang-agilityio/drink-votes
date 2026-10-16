@@ -4,27 +4,33 @@ import type { IdentityEnv } from '../middleware/identity.js';
 
 const PRODUCT_NAME = 'Drink Tonight';
 
+const FONT_HREF =
+  'https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap&subset=vietnamese';
+
 const css = `
 *, *::before, *::after { box-sizing: border-box; }
 html { font-size: 100%; }
 body {
   margin: 0;
-  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-family: "Nunito", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   font-size: 1rem;
   line-height: 1.5;
-  color: #1f2933;
-  background: #f5f7fa;
+  color: #3d2b22;
+  background: #fbf3e6;
   overflow-wrap: anywhere;
 }
 img, input, select, textarea, button { max-width: 100%; font: inherit; }
-header.site-header { background: #7b341e; color: #fff; padding: 0.75rem 1rem; }
+header.site-header { background: #7a3b1e; color: #fff; padding: 0.75rem 1rem; box-shadow: 0 2px 8px rgba(122,59,30,.12); }
 header.site-header a { color: inherit; text-decoration: none; }
 header.site-header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 0.25rem 1rem; }
 header.site-header .who { margin: 0; font-size: 0.9rem; }
 header.site-header .who a { text-decoration: underline; margin-left: 0.5rem; }
-header.site-header .brand { margin: 0; font-size: 1.25rem; font-weight: 700; }
+header.site-header .brand { margin: 0; font-size: 1.25rem; font-weight: 800; font-family: "Nunito", system-ui, sans-serif; }
 main { width: 100%; max-width: 40rem; margin: 0 auto; padding: 1rem; }
-h1, h2 { line-height: 1.25; }
+h1, h2, h3 { color: #3b1f0e; }
+h1, h2 { line-height: 1.25; font-family: "Nunito", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; font-weight: 800; }
+main a { color: #b4531a; }
+button { font-weight: 700; }
 `;
 
 /** A POST-only URL has no page to return to: use the outing page, or the home page. */
@@ -56,6 +62,9 @@ export function Layout({ title, children }: { title?: string; children?: Child }
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <title>{fullTitle}</title>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous" />
+        <link rel="stylesheet" href={FONT_HREF} />
         <style dangerouslySetInnerHTML={{ __html: css }} />
       </head>
       <body>

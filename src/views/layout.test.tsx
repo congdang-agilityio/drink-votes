@@ -26,6 +26,14 @@ describe('Layout', () => {
     expect(html).toContain('max-width: 100%');
   });
 
+  it('uses the warm beer theme and a rounded Vietnamese font', async () => {
+    const html = String(await (<Layout><p>x</p></Layout>));
+    expect(html).toContain('background: #fbf3e6');
+    expect(html).toMatch(/h1, h2[^}]*font-family: "Nunito"/);
+    expect(html).toMatch(/<link[^>]*fonts\.googleapis\.com[^>]*subset=vietnamese/);
+    for (const old of ['#f5f7fa', '#1f2933', '#d9e2ec']) expect(html).not.toContain(old);
+  });
+
   it('shows no name when rendered outside a request', async () => {
     const html = String(await (<Layout><p>x</p></Layout>));
     expect(html).not.toContain('/me/name');

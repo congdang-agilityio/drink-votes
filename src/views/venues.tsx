@@ -10,12 +10,13 @@ export const isWebLink = (value: string): boolean => /^https?:\/\//i.test(value)
 
 const css = `
 .venue-list { list-style: none; padding: 0; margin: 0 0 1.5rem; }
-.venue { background: #fff; border: 1px solid #d9e2ec; border-radius: 0.5rem; padding: 0.75rem; margin-bottom: 0.75rem; }
+.venue { background: #fff; border-radius: 1rem; box-shadow: 0 2px 8px rgba(122,59,30,.12); padding: 0.75rem 1rem; margin-bottom: 0.75rem; }
 .venue h3 { margin: 0 0 0.25rem; font-size: 1.1rem; }
 .venue p { margin: 0.25rem 0; }
 .venue-form label { display: block; font-weight: 600; margin-top: 0.75rem; }
-.venue-form input, .venue-form textarea { width: 100%; padding: 0.5rem; }
-.venue-form button { margin-top: 1rem; padding: 0.5rem 1rem; }
+.venue-form input, .venue-form textarea { width: 100%; padding: 0.5rem; border: 1px solid #d9b99a; border-radius: 0.5rem; background: #fff; color: inherit; }
+.venue-form button { margin-top: 1rem; min-height: 2.75rem; padding: 0.5rem 1rem; border: 0; border-radius: 1rem; background: #e8742a; color: #3b1f0e; cursor: pointer; }
+.venue-form button:hover { background: #f0a030; }
 `;
 
 function MapsLink({ url }: { url: string }) {

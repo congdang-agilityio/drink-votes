@@ -12,7 +12,7 @@ export interface UpcomingOutingView {
 const css = `
 .upcoming { list-style: none; margin: 0 0 1rem; padding: 0; }
 .upcoming li { margin-bottom: 0.5rem; }
-.upcoming a { display: block; min-height: 2.75rem; padding: 0.75rem 1rem; border: 2px solid #7b341e; border-radius: 0.5rem; text-decoration: none; }
+.upcoming a { display: block; min-height: 2.75rem; padding: 0.75rem 1rem; border: 0; border-left: 0.4rem solid #7a3b1e; background: #fff; box-shadow: 0 2px 8px rgba(122,59,30,.12); border-radius: 1rem; color: #3b1f0e; font-weight: 700; text-decoration: none; }
 `;
 
 export function UpcomingOutings({ outings }: { outings: UpcomingOutingView[] }) {
