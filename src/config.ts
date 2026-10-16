@@ -4,6 +4,8 @@ export interface Config {
   readonly databaseUrl: string;
   appTz: string;
   defaultCloseAt: string;
+  /** Fewer Going than this at the close cancels the outing. */
+  minPeople: number;
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
@@ -15,6 +17,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(defaultCloseAt)) {
     throw new Error(`DEFAULT_CLOSE_AT must match HH:mm (24-hour), got "${defaultCloseAt}"`);
   }
+  const minPeopleRaw = env.MIN_PEOPLE ?? '3';
+  if (!/^\d+$/.test(minPeopleRaw) || Number(minPeopleRaw) < 1) {
+    throw new Error(`MIN_PEOPLE must be a positive integer, got "${minPeopleRaw}"`);
+  }
   return {
     port: Number(portRaw),
     get databaseUrl() {
@@ -24,6 +30,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     },
     appTz: env.APP_TZ ?? 'Asia/Ho_Chi_Minh',
     defaultCloseAt,
+    minPeople: Number(minPeopleRaw),
   };
 }
 
