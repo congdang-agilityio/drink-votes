@@ -282,26 +282,50 @@ describe('GET /outings/:id', () => {
         expect(html).not.toContain('Chưa có phiếu');
       });
 
-      it('shows all tied leaders and not a venue below', async () => {
-        const ps = [] as Awaited<ReturnType<typeof asParticipant>>[];
-        for (const n of ['Lan', 'Minh', 'Nam', 'Oanh', 'Phúc']) ps.push(await asParticipant(n));
-        const id = await seed(ps[0].participant.id);
+      async function tiedSetup() {
+        const lan = await asParticipant('Lan');
+        const minh = await asParticipant('Minh');
+        const id = await seed(lan.participant.id);
         const [b, a] = await venueIds(id);
-        const c = await createVenue({ name: 'Quán Chay C', address: '3 Trần Phú', mapsUrl: null });
-        const id2 = await createOuting({
-          date: '2030-05-18', sitTime: '18:30', closeTime: '16:00',
-          venueIds: [a!, b!, c.id], organizerId: ps[0].participant.id,
+        for (const p of [lan, minh]) await setAnswer(id, p.participant.id, true);
+        await castVote(id, lan.participant.id, a!);
+        await castVote(id, minh.participant.id, b!);
+        return { id, a: a!, b: b!, lan, minh };
+      }
+      const markVisited = async (venueId: string, date: string, organizerId: string) => {
+        const past = await createOuting({
+          date, sitTime: '18:30', closeTime: '16:00', venueIds: [venueId], organizerId,
         });
-        for (const p of ps) await setAnswer(id2, p.participant.id, true);
-        await castVote(id2, ps[0].participant.id, a!);
-        await castVote(id2, ps[1].participant.id, a!);
-        await castVote(id2, ps[2].participant.id, b!);
-        await castVote(id2, ps[3].participant.id, b!);
-        await castVote(id2, ps[4].participant.id, c.id);
-        const line = leadLine(await get(id2, ps[0].headers));
-        expect(line).toContain('Quán Ốc Đào');
-        expect(line).toContain('Bia Hơi Hà Nội');
-        expect(line).not.toContain('Quán Chay C');
+        await getPool().query(
+          'UPDATE outings SET closed_at = now(), winner_venue_id = $2, visited = true WHERE id = $1',
+          [past, venueId],
+        );
+      };
+
+      it('shows the tied venues and the organizer note when the tie-break cannot decide', async () => {
+        const { id, lan } = await tiedSetup();
+        const html = await get(id, lan.headers);
+        expect(html).toContain('Hoà: Bia Hơi Hà Nội, Quán Ốc Đào – chủ kèo sẽ chọn');
+        expect(html).not.toContain('Chưa có phiếu');
+      });
+
+      it('shows only the venue the tie-break picks', async () => {
+        const { id, a, lan } = await tiedSetup();
+        await markVisited(a, '2030-01-01', lan.participant.id);
+        const html = await get(id, lan.headers);
+        expect(leadLine(html)).toContain('Bia Hơi Hà Nội');
+        expect(leadLine(html)).not.toContain('Quán Ốc Đào');
+        expect(html).not.toContain('chủ kèo sẽ chọn');
+      });
+
+      it('updates when a vote changes', async () => {
+        const { id, a, lan, minh } = await tiedSetup();
+        await markVisited(a, '2030-01-01', lan.participant.id);
+        expect(leadLine(await get(id, lan.headers))).toContain('Bia Hơi Hà Nội');
+        await castVote(id, minh.participant.id, a);
+        const html = await get(id, lan.headers);
+        expect(leadLine(html)).toContain('Quán Ốc Đào');
+        expect(leadLine(html)).not.toContain('Bia Hơi Hà Nội');
       });
 
       it('shows "Chưa có phiếu" and no leader for a new outing', async () => {
