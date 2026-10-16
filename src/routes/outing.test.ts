@@ -1,9 +1,10 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { createApp } from '../app.js';
 import { setAnswer } from '../db/attendance.js';
-import { createOuting } from '../db/outings.js';
+import { createOuting, getOuting } from '../db/outings.js';
 import { closePool } from '../db/pool.js';
 import { createVenue } from '../db/venues.js';
+import { castVote } from '../db/votes.js';
 import { resetDb } from '../test/db.js';
 import { asParticipant } from '../test/identity.js';
 
@@ -176,6 +177,91 @@ describe('GET /outings/:id', () => {
       const html = await get(id, a.headers);
       expect(html).toContain('Số người đi: 2');
       expect(goingList(html)).toBe('<li>Lan</li><li>Lan</li>');
+    });
+  });
+  describe('voting section', () => {
+    const get = async (id: string, headers: Record<string, string>) =>
+      (await createApp().request(`/outings/${id}`, { headers })).text();
+    const venueIds = async (id: string) => (await getOuting(id))!.venues.map((v) => v.id);
+    const countOf = (html: string, name: string) =>
+      html.match(new RegExp(`${name}[\\s\\S]*?(\\d+) phiếu`))?.[1];
+    const voteForms = (html: string) => html.match(/<form[^>]*\/vote"/g) ?? [];
+
+    it('shows counts, vote buttons to a Going person, and marks their choice', async () => {
+      const lan = await asParticipant('Lan');
+      const id = await seed(lan.participant.id);
+      const [b, a] = await venueIds(id); // chosen order: Bia Hơi first, Quán Ốc Đào second
+      await setAnswer(id, lan.participant.id, true);
+      let html = await get(id, lan.headers);
+      expect(voteForms(html)).toHaveLength(2);
+      expect(html).toContain(`action="/outings/${id}/vote"`);
+      expect(html).toContain(`name="venueId" value="${a}"`);
+      expect(html).toContain('Chọn quán này');
+      expect(html).not.toContain('Bạn đã chọn');
+      expect(countOf(html, 'Quán Ốc Đào')).toBe('0');
+      await castVote(id, lan.participant.id, a!);
+      html = await get(id, lan.headers);
+      expect(countOf(html, 'Quán Ốc Đào')).toBe('1');
+      expect(countOf(html, 'Bia Hơi Hà Nội')).toBe('0');
+      expect(html.match(/Bạn đã chọn/g)).toHaveLength(1);
+      expect(html.indexOf('Bạn đã chọn')).toBeGreaterThan(html.indexOf('Quán Ốc Đào'));
+      await castVote(id, lan.participant.id, b!);
+      html = await get(id, lan.headers);
+      expect(countOf(html, 'Quán Ốc Đào')).toBe('0');
+      expect(countOf(html, 'Bia Hơi Hà Nội')).toBe('1');
+      expect(html.indexOf('Bạn đã chọn')).toBeLessThan(html.indexOf('Quán Ốc Đào'));
+    });
+
+    it('shows counts but no vote forms to Not going and unanswered viewers', async () => {
+      const lan = await asParticipant('Lan');
+      const minh = await asParticipant('Minh');
+      const nam = await asParticipant('Nam');
+      const id = await seed(lan.participant.id);
+      const [, a] = await venueIds(id);
+      await setAnswer(id, lan.participant.id, true);
+      await castVote(id, lan.participant.id, a!);
+      await setAnswer(id, minh.participant.id, false);
+      for (const viewer of [minh, nam]) {
+        const html = await get(id, viewer.headers);
+        expect(countOf(html, 'Quán Ốc Đào')).toBe('1');
+        expect(voteForms(html)).toHaveLength(0);
+        expect(html).not.toContain('Chọn quán này');
+        expect(html).not.toContain('Bạn đã chọn');
+        expect(html).toContain('Chọn Đi để bình chọn.');
+      }
+    });
+
+    it('never reveals who voted for which venue', async () => {
+      const lan = await asParticipant('Lan');
+      const minh = await asParticipant('Minh');
+      const id = await seed(lan.participant.id);
+      const [b, a] = await venueIds(id);
+      await setAnswer(id, lan.participant.id, true);
+      await setAnswer(id, minh.participant.id, true);
+      await castVote(id, lan.participant.id, a!);
+      await castVote(id, minh.participant.id, b!);
+      const html = await get(id, lan.headers);
+      const venues = html.match(/<ul class="venue-list">([\s\S]*?)<\/ul>/)![1]!;
+      expect(venues).not.toContain('Lan');
+      expect(venues).not.toContain('Minh');
+      expect(html.match(/Bạn đã chọn/g)).toHaveLength(1);
+    });
+
+    it('drops the vote when the person goes Not going and leaves no choice after Going again', async () => {
+      const lan = await asParticipant('Lan');
+      const id = await seed(lan.participant.id);
+      const [, a] = await venueIds(id);
+      await setAnswer(id, lan.participant.id, true);
+      await castVote(id, lan.participant.id, a!);
+      await setAnswer(id, lan.participant.id, false);
+      let html = await get(id, lan.headers);
+      expect(countOf(html, 'Quán Ốc Đào')).toBe('0');
+      expect(voteForms(html)).toHaveLength(0);
+      await setAnswer(id, lan.participant.id, true);
+      html = await get(id, lan.headers);
+      expect(countOf(html, 'Quán Ốc Đào')).toBe('0');
+      expect(html).not.toContain('Bạn đã chọn');
+      expect(voteForms(html)).toHaveLength(2);
     });
   });
 });
