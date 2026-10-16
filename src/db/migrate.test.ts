@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readdir, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -175,6 +175,40 @@ describe('migrate as a script', () => {
     }
   });
 
+  it('with the real migrations: one outing failing to close is reported and still exits 0', async () => {
+    const real = await mkdtemp(join(tmpdir(), 'migrate-script-'));
+    try {
+      await symlink(resolve('migrations'), join(real, 'migrations'));
+      expect(run(script, real).status).toBe(0);
+      const s = SCRIPT_SCHEMA;
+      const { rows: ids } = await admin.query<{ id: string }>(
+        `WITH p AS (INSERT INTO ${s}.participants (display_name) VALUES ('Minh') RETURNING id)
+         INSERT INTO ${s}.outings (outing_date, sit_time, close_time, organizer_id)
+         SELECT d::date, '18:30', '16:00', p.id FROM p, unnest(ARRAY['2024-03-01', '2024-03-02']) d
+         RETURNING id`,
+      );
+      const [ok, bad] = ids.map((r) => r.id);
+      // Only the second outing cannot be closed: its UPDATE is rejected.
+      await admin.query(
+        `CREATE FUNCTION ${s}.reject_close() RETURNS trigger LANGUAGE plpgsql AS $$
+         BEGIN RAISE EXCEPTION 'close rejected for test'; END $$;
+         CREATE TRIGGER reject_close BEFORE UPDATE ON ${s}.outings
+           FOR EACH ROW WHEN (OLD.id = '${bad}') EXECUTE FUNCTION ${s}.reject_close();`,
+      );
+      const res = run(script, real);
+      expect(res.status).toBe(0);
+      expect(res.stdout).toContain('Closed 1 past-due outing, 1 failed.');
+      expect(res.stderr).toContain(bad);
+      const closedAt = async (id: string) =>
+        (await admin.query(`SELECT closed_at FROM ${s}.outings WHERE id = $1`, [id])).rows[0]
+          .closed_at;
+      expect(await closedAt(ok)).not.toBeNull();
+      expect(await closedAt(bad)).toBeNull();
+    } finally {
+      await rm(real, { recursive: true, force: true });
+    }
+  });
+
   it('exits 1 when closing due outings fails after migrating', async () => {
     const res = run(script, noOutingsDir);
     expect(res.status).toBe(1);
@@ -193,6 +227,34 @@ describe('migrate as a script', () => {
       expect(await recorded()).toEqual(['0001_ok.sql']);
     } finally {
       await rm(link, { force: true });
+    }
+  });
+
+  it('with the real migrations: a failed migration closes nothing and exits 1', async () => {
+    // The real schema, so a close attempt would succeed if the step ran it after a failure.
+    const real = await mkdtemp(join(tmpdir(), 'migrate-script-'));
+    try {
+      await mkdir(join(real, 'migrations'));
+      for (const name of (await readdir('migrations')).filter((f) => f.endsWith('.sql'))) {
+        await symlink(resolve('migrations', name), join(real, 'migrations', name));
+      }
+      expect(run(script, real).status).toBe(0);
+      const s = SCRIPT_SCHEMA;
+      await admin.query(
+        `WITH p AS (INSERT INTO ${s}.participants (display_name) VALUES ('Minh') RETURNING id)
+         INSERT INTO ${s}.outings (outing_date, sit_time, close_time, organizer_id)
+         SELECT '2024-03-01', '18:30', '16:00', id FROM p`,
+      );
+      await writeFile(join(real, 'migrations', '9999_broken.sql'), 'INSERT INTO missing_table VALUES (1);');
+      const res = run(script, real);
+      expect(res.status).toBe(1);
+      expect(res.stderr).toContain('9999_broken.sql');
+      expect(res.stdout).not.toContain('Closed');
+      const { rows } = await admin.query(`SELECT closed_at FROM ${s}.outings`);
+      expect(rows).toHaveLength(1);
+      expect(rows[0].closed_at).toBeNull();
+    } finally {
+      await rm(real, { recursive: true, force: true });
     }
   });
 

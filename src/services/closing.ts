@@ -121,11 +121,19 @@ export async function closeOuting(
  * concurrent sweeps skip rows another sweep holds and re-check closed_at under the lock, so no
  * outing is closed twice. An outing that fails to close is logged (id and error) and skipped.
  */
-export async function closeDueOutings({
+export async function closeDueOutings(options: CloseOptions = {}): Promise<string[]> {
+  return (await sweepDueOutings(options)).closed;
+}
+
+/**
+ * Same sweep as closeDueOutings, also returning the ids of the outings that failed to close
+ * (left open for the next sweep). Throws only when the due-outings query itself fails.
+ */
+export async function sweepDueOutings({
   now = new Date(),
   tz = config.appTz,
   minPeople = config.minPeople,
-}: CloseOptions = {}): Promise<string[]> {
+}: CloseOptions = {}): Promise<{ closed: string[]; failed: string[] }> {
   const { rows } = await getPool().query<{ id: string }>(
     `SELECT id FROM outings
       WHERE closed_at IS NULL AND (outing_date + close_time) AT TIME ZONE $2 <= $1
@@ -133,6 +141,7 @@ export async function closeDueOutings({
     [now, tz],
   );
   const closed: string[] = [];
+  const failed: string[] = [];
   for (const { id } of rows) {
     try {
       const state = await inTransaction((client) =>
@@ -143,7 +152,8 @@ export async function closeDueOutings({
       // One failing outing must not stop the others (nor fail the page request): it is left
       // open and retried by the next sweep.
       console.error(`closeDueOutings: could not close outing ${id}`, err);
+      failed.push(id);
     }
   }
-  return closed;
+  return { closed, failed };
 }

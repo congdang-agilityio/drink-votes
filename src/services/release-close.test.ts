@@ -168,7 +168,7 @@ describe('release step: close past-due M1 outings', () => {
     const first = await getOuting(s.id);
 
     const second = await runReleaseStep();
-    expect(second).toEqual({ applied: [], closed: [] });
+    expect(second).toEqual({ applied: [], closed: [], failed: [] });
     const after = await getOuting(s.id);
     expect(after?.closedAt?.getTime()).toBe(first?.closedAt?.getTime());
     expect(after?.winnerVenueId).toBe(s.c);
