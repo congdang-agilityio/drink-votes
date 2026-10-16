@@ -1,4 +1,7 @@
 import { describe, expect, it } from 'vitest';
+import { Hono } from 'hono';
+import { contextStorage } from 'hono/context-storage';
+import type { IdentityEnv } from '../middleware/identity.js';
 import { Layout } from './layout.js';
 
 describe('Layout', () => {
@@ -26,5 +29,31 @@ describe('Layout', () => {
   it('shows no name when rendered outside a request', async () => {
     const html = String(await (<Layout><p>x</p></Layout>));
     expect(html).not.toContain('/me/name');
+  });
+});
+
+describe('Layout "Đổi tên" return link', () => {
+  async function linkFor(method: string, path: string): Promise<string> {
+    const app = new Hono<IdentityEnv>();
+    app.use(contextStorage());
+    app.use(async (c, next) => {
+      c.set('participant', { id: 'p', displayName: 'Lan' } as never);
+      await next();
+    });
+    app.all('*', (c) => c.html(<Layout>x</Layout>));
+    const html = await (await app.request(path, { method })).text();
+    return /href="(\/me\/name[^"]*)"/.exec(html)?.[1] ?? '';
+  }
+
+  it('GET keeps its own path and query', async () => {
+    expect(await linkFor('GET', '/outings/abc?x=1')).toBe('/me/name?next=%2Foutings%2Fabc%3Fx%3D1');
+  });
+
+  it.each(['close', 'choose', 'visit'])('POST /outings/:id/%s returns to the outing', async (a) => {
+    expect(await linkFor('POST', `/outings/abc/${a}`)).toBe('/me/name?next=%2Foutings%2Fabc');
+  });
+
+  it('other non-GET paths fall back to /', async () => {
+    expect(await linkFor('POST', '/venues')).toBe('/me/name?next=%2F');
   });
 });
