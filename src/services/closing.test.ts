@@ -65,6 +65,47 @@ async function forceVotes(outingId: string, venueIds: string[]): Promise<void> {
   }
 }
 
+/** An outing on 20/10 closing at 16:00 offering the given venues (created when not passed). */
+async function outingWith(count: number): Promise<{ outingId: string; v: string[] }> {
+  const organizer = await createParticipant('Minh');
+  const v: string[] = [];
+  for (let i = 0; i < count; i++) {
+    v.push((await createVenue({ name: `V${i} ${Math.random()}`, address: 'x' })).id);
+  }
+  const outingId = await createOuting({
+    date: '2026-10-20',
+    sitTime: '18:30',
+    closeTime: '16:00',
+    venueIds: v,
+    organizerId: organizer.id,
+  });
+  return { outingId, v };
+}
+
+/** A past outing on `date` won by `venueId`, with the organizer's visit answer. */
+async function pastWin(venueId: string, date: string, visited: boolean | null): Promise<void> {
+  const organizer = await createParticipant('Minh');
+  const id = await createOuting({
+    date,
+    sitTime: '18:30',
+    closeTime: '16:00',
+    venueIds: [venueId],
+    organizerId: organizer.id,
+  });
+  await getPool().query(
+    'UPDATE outings SET closed_at = now(), winner_venue_id = $2, visited = $3 WHERE id = $1',
+    [id, venueId, visited],
+  );
+}
+
+/** Going participants who do not vote. */
+async function goingOnly(outingId: string, n: number): Promise<void> {
+  for (let i = 0; i < n; i++) {
+    const p = await createParticipant(`G ${Math.random()}`);
+    expect(await setAnswer(outingId, p.id, true, undefined, { now: AT_1559, tz: TZ })).toBe('ok');
+  }
+}
+
 describe('closing service', () => {
   beforeEach(async () => {
     await resetDb();
@@ -223,5 +264,72 @@ describe('closing service', () => {
       Array.from({ length: 4 }, () => closeOuting(s.outingId, { now: CLOSE_INSTANT, tz: TZ, minPeople: NO_MIN })),
     );
     expect(results.filter((r) => r?.changed)).toHaveLength(1);
+  });
+  describe('least-recently-visited tie-break (#90)', () => {
+    const opts = { now: CLOSE_INSTANT, tz: TZ, minPeople: MIN };
+
+    it('AC1: a never visited venue beats a visited one', async () => {
+      const { outingId, v: [a, b] } = await outingWith(2);
+      await pastWin(a, '2026-10-01', true);
+      await vote(outingId, [a, b, a, b]);
+      expect((await closeOuting(outingId, opts))?.winnerVenueId).toBe(b);
+    });
+
+    it('AC2: the oldest last visit wins', async () => {
+      const { outingId, v: [a, b] } = await outingWith(2);
+      await pastWin(a, '2026-09-01', true);
+      await pastWin(b, '2026-10-01', true);
+      await vote(outingId, [a, b, a, b]);
+      expect((await closeOuting(outingId, opts))?.winnerVenueId).toBe(a);
+    });
+
+    it('AC3: a win marked "Không đi" or unanswered ranks as never visited', async () => {
+      for (const answer of [false, null]) {
+        await resetDb();
+        const { outingId, v: [a, b] } = await outingWith(2);
+        await pastWin(a, '2026-10-05', answer);
+        await pastWin(b, '2026-10-01', true);
+        await vote(outingId, [a, b, a, b]);
+        expect((await closeOuting(outingId, opts))?.winnerVenueId).toBe(a);
+      }
+    });
+
+    it('AC4: with no votes every venue is tied and the oldest visit wins', async () => {
+      const { outingId, v: [a, b, c] } = await outingWith(3);
+      await pastWin(a, '2026-10-01', true);
+      await pastWin(b, '2026-09-01', true);
+      await pastWin(c, '2026-09-15', true);
+      await goingOnly(outingId, MIN);
+      const closed = await closeDueOutings(opts);
+      expect(closed).toEqual([outingId]);
+      const outing = await getOuting(outingId);
+      expect(outing?.cancelled).toBe(false);
+      expect(outing?.winnerVenueId).toBe(b);
+    });
+
+    it('AC5: 3/1/1 votes ignores visits', async () => {
+      const { outingId, v: [a, b, c] } = await outingWith(3);
+      await pastWin(a, '2026-10-10', true);
+      await vote(outingId, [a, a, a, b, c]);
+      expect((await closeOuting(outingId, opts))?.winnerVenueId).toBe(a);
+    });
+
+    it('two never visited tied venues close with no winner', async () => {
+      const { outingId, v: [a, b, c] } = await outingWith(3);
+      await pastWin(c, '2026-10-01', true);
+      await vote(outingId, [a, b, a, b]);
+      const state = await closeOuting(outingId, opts);
+      expect(state).toMatchObject({ cancelled: false, winnerVenueId: null, changed: true });
+    });
+
+    it('cancels before the tie-break with fewer than MIN_PEOPLE Going', async () => {
+      const { outingId, v: [a, b] } = await outingWith(2);
+      await pastWin(a, '2026-10-01', true);
+      await vote(outingId, [a, b]);
+      expect(await closeOuting(outingId, opts)).toMatchObject({
+        cancelled: true,
+        winnerVenueId: null,
+      });
+    });
   });
 });
