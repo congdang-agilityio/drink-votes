@@ -14,10 +14,7 @@ export interface CloseState {
   changed: boolean;
 }
 
-export interface CloseOptions {
-  now?: Date;
-  tz?: string;
-}
+export type CloseOptions = { now?: Date; tz?: string };
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -48,9 +45,9 @@ async function inTransaction<T>(fn: (client: pg.PoolClient) => Promise<T>): Prom
 }
 
 /**
- * Locks the outing row (always first, before attendance and votes) and closes it unless it is
- * already closed. closed_at is the close instant, or now when closing before it (early close).
- * With skipLocked, a row locked by another closer is skipped (returns null).
+ * Locks the outing row (always first, before attendance and votes) and closes it unless already
+ * closed: closed_at is the close instant, or now when earlier (early close). With skipLocked, a
+ * row locked by another closer is skipped (null).
  */
 async function closeLocked(
   client: pg.PoolClient,
@@ -79,10 +76,8 @@ async function closeLocked(
   }
   const closedAt = now < row.close_instant ? now : row.close_instant;
   const winnerVenueId = decideOutcome({ counts: await getVoteCounts(outingId, client) });
-  await client.query(
-    'UPDATE outings SET closed_at = $2, winner_venue_id = $3 WHERE id = $1',
-    [outingId, closedAt, winnerVenueId],
-  );
+  const sql = 'UPDATE outings SET closed_at = $2, winner_venue_id = $3 WHERE id = $1';
+  await client.query(sql, [outingId, closedAt, winnerVenueId]);
   return { outingId, closedAt, cancelled: false, winnerVenueId, changed: true };
 }
 
