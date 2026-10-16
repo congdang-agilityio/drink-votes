@@ -6,6 +6,7 @@ import type { IdentityEnv } from '../middleware/identity.js';
 import { answer } from './answer.js';
 import { vote } from './vote.js';
 import { leadingVenues } from '../services/leading.js';
+import { CancelledOutingPage } from '../views/cancelled-outing.js';
 import { ClosedOutingPage } from '../views/closed-outing.js';
 import { OutingNotFound, OutingPage } from '../views/outing-page.js';
 
@@ -16,6 +17,12 @@ outing.route('/', vote);
 outing.get('/outings/:id{[0-9a-f-]{36}}', async (c) => {
   const found = await getOuting(c.req.param('id'));
   if (!found) return c.html(`<!DOCTYPE html>${(<OutingNotFound />)}`, 404);
+  if (found.closedAt && found.cancelled) {
+    const { goingCount } = await getAttendance(found.id);
+    return c.html(
+      `<!DOCTYPE html>${(<CancelledOutingPage outing={found} goingCount={goingCount} />)}`,
+    );
+  }
   if (found.closedAt) {
     return c.html(
       `<!DOCTYPE html>${(<ClosedOutingPage outing={found} />)}`,
