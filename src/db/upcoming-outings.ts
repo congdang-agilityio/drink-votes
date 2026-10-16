@@ -20,7 +20,7 @@ interface Row {
 const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 /**
- * Outings dated `today` or later (a `YYYY-MM-DD` day computed by the caller, Vietnam time),
+ * Open outings (not closed or cancelled) dated `today` or later (a `YYYY-MM-DD` day computed by the caller, Vietnam time),
  * soonest first, with their Going headcount. Pass `db` to run inside a transaction.
  */
 export async function listUpcomingOutings(
@@ -34,7 +34,7 @@ export async function listUpcomingOutings(
             to_char(o.sit_time, 'HH24:MI') AS sit_time,
             count(a.participant_id) FILTER (WHERE a.going)::int AS going_count
        FROM outings o LEFT JOIN attendance a ON a.outing_id = o.id
-      WHERE o.outing_date >= $1::date
+      WHERE o.outing_date >= $1::date AND o.closed_at IS NULL
       GROUP BY o.id
       ORDER BY o.outing_date, o.sit_time, o.created_at`,
     [today],

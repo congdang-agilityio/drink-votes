@@ -1,9 +1,9 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { resetDb } from '../test/db.js';
 import { setAnswer } from './attendance.js';
-import { createOuting } from './outings.js';
+import { createOuting, getOuting } from './outings.js';
 import { createParticipant } from './participants.js';
-import { closePool } from './pool.js';
+import { closePool, getPool } from './pool.js';
 import { listUpcomingOutings } from './upcoming-outings.js';
 import { createVenue } from './venues.js';
 
@@ -59,6 +59,25 @@ describe('listUpcomingOutings', () => {
     const o = await createParticipant('Minh');
     await outing(o.id, '2026-10-14');
     expect(await listUpcomingOutings('2026-10-15')).toEqual([]);
+  });
+
+  it('hides closed (with or without a winner) and cancelled outings dated today', async () => {
+    const o = await createParticipant('Minh');
+    const open = await outing(o.id, '2026-10-15');
+    const won = await outing(o.id, '2026-10-15');
+    const waiting = await outing(o.id, '2026-10-15');
+    const cancelled = await outing(o.id, '2026-10-15');
+    const pool = getPool();
+    const venue = (await getOuting(won))!.venues[0].id;
+    await pool.query('UPDATE outings SET closed_at = now(), winner_venue_id = $2 WHERE id = $1', [
+      won,
+      venue,
+    ]);
+    await pool.query('UPDATE outings SET closed_at = now() WHERE id = $1', [waiting]);
+    await pool.query('UPDATE outings SET closed_at = now(), cancelled = true WHERE id = $1', [
+      cancelled,
+    ]);
+    expect((await listUpcomingOutings('2026-10-15')).map((r) => r.id)).toEqual([open]);
   });
 
   it('rejects a malformed day', async () => {
