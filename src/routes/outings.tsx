@@ -4,6 +4,7 @@ import { createOuting } from '../db/outings.js';
 import { listVenues } from '../db/venues.js';
 import { isValidDate, isValidTime } from '../lib/time.js';
 import type { IdentityEnv } from '../middleware/identity.js';
+import { validateNewOuting } from '../services/outing-rules.js';
 import { OutingForm, type OutingFormErrors, type OutingFormValues } from '../views/outing-form.js';
 
 export const outings = new Hono<IdentityEnv>();
@@ -18,7 +19,6 @@ outings.get('/outings/new', async (c) =>
   c.html(await render({ date: '', sitTime: '18:30', closeTime: config.defaultCloseAt, venueIds: [] })),
 );
 
-// Business rules (venue count, past date, time order) with their messages come with #9.
 outings.post('/outings', async (c) => {
   const body = await c.req.parseBody({ all: true });
   const raw = body['venueIds'];
@@ -34,6 +34,8 @@ outings.post('/outings', async (c) => {
   if (!isValidDate(values.date) || !isValidTime(values.sitTime) || !isValidTime(values.closeTime)) {
     return c.html(await render(values, { form: 'Thông tin chưa hợp lệ, bạn kiểm tra lại ngày và giờ nhé.' }), 400);
   }
+  const check = validateNewOuting(values);
+  if (!check.ok) return c.html(await render(values, check.errors), 400);
   const id = await createOuting({
     date: values.date,
     sitTime: values.sitTime,

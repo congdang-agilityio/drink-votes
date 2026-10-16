@@ -9,7 +9,7 @@ export interface NewOutingInput {
   date: string;
   sitTime: string;
   closeTime: string;
-  venueIds: number[];
+  venueIds: ReadonlyArray<string | number>;
 }
 
 export type OutingValidation =
