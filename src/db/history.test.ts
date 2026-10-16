@@ -20,10 +20,10 @@ async function setup() {
   return { a, make, close };
 }
 
-async function going(outingId: string, n: number) {
-  for (let i = 0; i < n; i++) {
+async function going(outingId: string, n: number, notGoing = 0) {
+  for (let i = 0; i < n + notGoing; i++) {
     const p = await createParticipant(`P${Math.random()}`);
-    await setAnswer(outingId, p.id, true);
+    await setAnswer(outingId, p.id, i < n);
   }
 }
 
@@ -54,11 +54,22 @@ describe('listHistory', () => {
     expect((await listHistory()).map((r) => r.id)).toEqual([late, early]);
   });
 
+  it('orders the same day and sitting time by creation, latest first', async () => {
+    const { make, close } = await setup();
+    const older = await make('2026-12-10');
+    const newer = await make('2026-12-10');
+    await sql(`UPDATE outings SET created_at = now() - interval '1 hour' WHERE id = $1`, [older]);
+    await sql(`UPDATE outings SET created_at = now() WHERE id = $1`, [newer]);
+    await close(newer);
+    await close(older);
+    expect((await listHistory()).map((r) => r.id)).toEqual([newer, older]);
+  });
+
   it('returns a won row with winner, headcount and each visited value', async () => {
     const { a, make } = await setup();
     const ids = [await make('2026-12-15'), await make('2026-12-14'), await make('2026-12-13')];
     for (const [i, id] of ids.entries()) {
-      await going(id, 4);
+      await going(id, 4, 2);
       const visited = [true, false, null][i];
       await sql('UPDATE outings SET closed_at = now(), winner_venue_id = $2, visited = $3 WHERE id = $1', [
         id,
@@ -91,7 +102,7 @@ describe('listHistory', () => {
   it('returns a cancelled row with its headcount', async () => {
     const { make, close } = await setup();
     const id = await make('2026-12-15');
-    await going(id, 2);
+    await going(id, 2, 1);
     await close(id, ', cancelled = true');
     expect(await listHistory()).toEqual([
       { id, date: '2026-12-15', outcome: 'cancelled', winnerName: null, goingCount: 2, visited: null },
