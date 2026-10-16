@@ -2,7 +2,8 @@ import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { createApp } from '../app.js';
 import { setAnswer } from '../db/attendance.js';
 import { createOuting, getOuting } from '../db/outings.js';
-import { closePool } from '../db/pool.js';
+import { closePool, getPool } from '../db/pool.js';
+import { recordTies } from '../db/ties.js';
 import { createVenue } from '../db/venues.js';
 import { castVote } from '../db/votes.js';
 import { resetDb } from '../test/db.js';
@@ -142,5 +143,114 @@ describe('POST /outings/:id/close', () => {
     const res = await close(UNKNOWN, org.headers);
     expect(res.status).toBe(404);
     expect(await res.text()).toContain('Không tìm thấy kèo này.');
+  });
+});
+
+const choose = (id: string, venueId: string | undefined, headers?: Record<string, string>) => {
+  const body = new URLSearchParams();
+  if (venueId !== undefined) body.set('venueId', venueId);
+  return createApp().request(`/outings/${id}/choose`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded', ...headers },
+    body,
+  });
+};
+
+/** A closed outing with no winner, waiting for the organizer: A and B tied, C not. */
+async function seedWaiting(organizerId: string) {
+  const [a, b, c] = await Promise.all(
+    ['A', 'B', 'C'].map((n) => createVenue({ name: `${n} ${Math.random()}`, address: n })),
+  );
+  const id = await createOuting({
+    date: '2030-05-17',
+    sitTime: '18:30',
+    closeTime: '16:00',
+    venueIds: [a.id, b.id, c.id],
+    organizerId,
+  });
+  await getPool().query('UPDATE outings SET closed_at = now() WHERE id = $1', [id]);
+  await recordTies(getPool(), id, [a.id, b.id]);
+  return { id, a: a.id, b: b.id, c: c.id };
+}
+
+describe('POST /outings/:id/choose', () => {
+  beforeEach(async () => {
+    await resetDb();
+  });
+
+  afterAll(async () => {
+    await closePool();
+  });
+
+  it('organizer chooses a tied venue: winner set, 303 to the outing', async () => {
+    const org = await asParticipant('Minh');
+    const s = await seedWaiting(org.participant.id);
+
+    const res = await choose(s.id, s.b, org.headers);
+    expect(res.status).toBe(303);
+    expect(res.headers.get('location')).toBe(`/outings/${s.id}`);
+    expect((await getOuting(s.id))?.winnerVenueId).toBe(s.b);
+  });
+
+  it('a second choice is refused with 409 and the winner is unchanged', async () => {
+    const org = await asParticipant('Minh');
+    const s = await seedWaiting(org.participant.id);
+    expect((await choose(s.id, s.b, org.headers)).status).toBe(303);
+
+    const res = await choose(s.id, s.a, org.headers);
+    expect(res.status).toBe(409);
+    expect(await res.text()).toContain('Không thể chọn quán');
+    expect((await getOuting(s.id))?.winnerVenueId).toBe(s.b);
+  });
+
+  it('a venue that was not tied is refused with 409 and no winner is set', async () => {
+    const org = await asParticipant('Minh');
+    const s = await seedWaiting(org.participant.id);
+
+    const res = await choose(s.id, s.c, org.headers);
+    expect(res.status).toBe(409);
+    expect((await getOuting(s.id))?.winnerVenueId).toBeNull();
+  });
+
+  it('another browser gets 403 with a Vietnamese message and no winner is set', async () => {
+    const org = await asParticipant('Minh');
+    const other = await asParticipant('Hoa');
+    const s = await seedWaiting(org.participant.id);
+
+    const res = await choose(s.id, s.a, other.headers);
+    expect(res.status).toBe(403);
+    const html = await res.text();
+    expect(html).toContain('Chỉ người tạo kèo mới được chọn quán.');
+    expect(html).toContain(`href="/outings/${s.id}"`);
+    expect((await getOuting(s.id))?.winnerVenueId).toBeNull();
+  });
+
+  it('an open outing is refused with 409 and stays open without a winner', async () => {
+    const org = await asParticipant('Minh');
+    const s = await seed(org.participant.id);
+    await recordTies(getPool(), s.id, [s.a, s.b]);
+
+    const res = await choose(s.id, s.a, org.headers);
+    expect(res.status).toBe(409);
+    const after = await getOuting(s.id);
+    expect(after?.closedAt).toBeNull();
+    expect(after?.winnerVenueId).toBeNull();
+  });
+
+  it('a missing or malformed venueId is refused with 400', async () => {
+    const org = await asParticipant('Minh');
+    const s = await seedWaiting(org.participant.id);
+
+    for (const venueId of [undefined, '', 'not-a-uuid', `${s.a}x`]) {
+      const res = await choose(s.id, venueId, org.headers);
+      expect(res.status).toBe(400);
+    }
+    expect((await getOuting(s.id))?.winnerVenueId).toBeNull();
+  });
+
+  it('returns 404 for an unknown outing', async () => {
+    const org = await asParticipant('Minh');
+    const res = await choose(UNKNOWN, UNKNOWN, org.headers);
+    expect(res.status).toBe(404);
   });
 });
