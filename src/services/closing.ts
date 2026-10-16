@@ -1,8 +1,8 @@
-import type pg from 'pg';
-import { config } from '../config.js';
-import { getPool } from '../db/pool.js';
-import { getVoteCounts } from '../db/votes.js';
-import { decideOutcome } from './outcome.js';
+import type pg from "pg";
+import { config } from "../config.js";
+import { getPool } from "../db/pool.js";
+import { getVoteCounts } from "../db/votes.js";
+import { decideOutcome } from "./outcome.js";
 
 /** State of an outing after a close attempt. */
 export interface CloseState {
@@ -14,9 +14,10 @@ export interface CloseState {
   changed: boolean;
 }
 
-export type CloseOptions = { now?: Date; tz?: string };
+export type CloseOptions = { now?: Date; tz?: string; minPeople?: number };
 
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 interface LockedRow {
   closed_at: Date | null;
@@ -26,16 +27,18 @@ interface LockedRow {
 }
 
 /** Runs fn in one transaction on a dedicated client. */
-async function inTransaction<T>(fn: (client: pg.PoolClient) => Promise<T>): Promise<T> {
+async function inTransaction<T>(
+  fn: (client: pg.PoolClient) => Promise<T>,
+): Promise<T> {
   const client = await getPool().connect();
   let failure: Error | undefined;
   try {
-    await client.query('BEGIN');
+    await client.query("BEGIN");
     const result = await fn(client);
-    await client.query('COMMIT');
+    await client.query("COMMIT");
     return result;
   } catch (err) {
-    await client.query('ROLLBACK').catch(() => undefined);
+    await client.query("ROLLBACK").catch(() => undefined);
     failure = err instanceof Error ? err : new Error(String(err));
     throw err;
   } finally {
@@ -54,13 +57,14 @@ async function closeLocked(
   outingId: string,
   now: Date,
   tz: string,
+  minPeople: number,
   skipLocked: boolean,
 ): Promise<CloseState | null> {
   const { rows } = await client.query<LockedRow>(
     `SELECT closed_at, cancelled, winner_venue_id,
             (outing_date + close_time) AT TIME ZONE $2 AS close_instant
        FROM outings WHERE id = $1
-        FOR UPDATE${skipLocked ? ' SKIP LOCKED' : ''}`,
+        FOR UPDATE${skipLocked ? " SKIP LOCKED" : ""}`,
     [outingId, tz],
   );
   const row = rows[0];
@@ -75,10 +79,19 @@ async function closeLocked(
     };
   }
   const closedAt = now < row.close_instant ? now : row.close_instant;
-  const winnerVenueId = decideOutcome({ counts: await getVoteCounts(outingId, client) });
-  const sql = 'UPDATE outings SET closed_at = $2, winner_venue_id = $3 WHERE id = $1';
-  await client.query(sql, [outingId, closedAt, winnerVenueId]);
-  return { outingId, closedAt, cancelled: false, winnerVenueId, changed: true };
+  const { rows: going } = await client.query<{ n: number }>(
+    "SELECT count(*)::int AS n FROM attendance WHERE outing_id = $1 AND going",
+    [outingId],
+  );
+  const { cancelled, winnerVenueId } = decideOutcome({
+    counts: await getVoteCounts(outingId, client),
+    goingCount: going[0].n,
+    minPeople,
+  });
+  const sql =
+    "UPDATE outings SET closed_at = $2, cancelled = $3, winner_venue_id = $4 WHERE id = $1";
+  await client.query(sql, [outingId, closedAt, cancelled, winnerVenueId]);
+  return { outingId, closedAt, cancelled, winnerVenueId, changed: true };
 }
 
 /**
@@ -87,10 +100,16 @@ async function closeLocked(
  */
 export async function closeOuting(
   outingId: string,
-  { now = new Date(), tz = config.appTz }: CloseOptions = {},
+  {
+    now = new Date(),
+    tz = config.appTz,
+    minPeople = config.minPeople,
+  }: CloseOptions = {},
 ): Promise<CloseState | null> {
-  if (typeof outingId !== 'string' || !UUID_RE.test(outingId)) return null;
-  return inTransaction((client) => closeLocked(client, outingId, now, tz, false));
+  if (typeof outingId !== "string" || !UUID_RE.test(outingId)) return null;
+  return inTransaction((client) =>
+    closeLocked(client, outingId, now, tz, minPeople, false),
+  );
 }
 
 /**
@@ -102,6 +121,7 @@ export async function closeOuting(
 export async function closeDueOutings({
   now = new Date(),
   tz = config.appTz,
+  minPeople = config.minPeople,
 }: CloseOptions = {}): Promise<string[]> {
   const { rows } = await getPool().query<{ id: string }>(
     `SELECT id FROM outings
@@ -111,7 +131,9 @@ export async function closeDueOutings({
   );
   const closed: string[] = [];
   for (const { id } of rows) {
-    const state = await inTransaction((client) => closeLocked(client, id, now, tz, true));
+    const state = await inTransaction((client) =>
+      closeLocked(client, id, now, tz, minPeople, true),
+    );
     if (state?.changed) closed.push(id);
   }
   return closed;

@@ -7,6 +7,15 @@ describe('loadConfig', () => {
     expect(c.port).toBe(3000);
     expect(c.appTz).toBe('Asia/Ho_Chi_Minh');
     expect(c.defaultCloseAt).toBe('16:00');
+    expect(c.minPeople).toBe(3);
+  });
+
+  it('reads MIN_PEOPLE', () => {
+    expect(loadConfig({ MIN_PEOPLE: '5' }).minPeople).toBe(5);
+  });
+
+  it.each(['0', '-1', '1.5', 'abc', ''])('rejects MIN_PEOPLE %j', (v) => {
+    expect(() => loadConfig({ MIN_PEOPLE: v })).toThrow(/MIN_PEOPLE/);
   });
 
   it('reads values from the given env', () => {
