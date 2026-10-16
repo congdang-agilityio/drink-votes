@@ -1,4 +1,4 @@
-import type { Venue } from '../db/venues.js';
+import type { VenueWithVisits } from '../db/venues.js';
 import { VENUE_FIELD_MAX_LENGTH as MAX } from '../services/venue-rules.js';
 import { Layout } from './layout.js';
 
@@ -32,10 +32,11 @@ function MapsLink({ url }: { url: string }) {
   );
 }
 
-function VenueItem({ venue }: { venue: Venue }) {
+function VenueItem({ venue }: { venue: VenueWithVisits }) {
   return (
     <li class="venue">
       <h3>{venue.name}</h3>
+      <p class="venue-visits">Đã đi {venue.visitCount} lần</p>
       <p class="venue-address">{venue.address}</p>
       {venue.mapsUrl ? <MapsLink url={venue.mapsUrl} /> : null}
       {venue.notes ? <p class="venue-notes">{venue.notes}</p> : null}
@@ -61,7 +62,7 @@ export function VenuesPage({
   values,
   errors = {},
 }: {
-  venues: Venue[];
+  venues: VenueWithVisits[];
   values?: VenueFormValues;
   errors?: VenueFormErrors;
 }) {
