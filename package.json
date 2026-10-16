@@ -15,7 +15,8 @@
   "dependencies": {
     "@hono/node-server": "^1.13.0",
     "hono": "^4.6.0",
-    "pg": "^8.23.1"
+    "pg": "^8.23.1",
+    "qrcode-generator": "^2.0.4"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
