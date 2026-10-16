@@ -24,6 +24,27 @@ describe('qrSvg', () => {
     expect(size).toBeGreaterThan(8);
   });
 
+  it('uses error correction level M (88-byte URL needs version 6, 41 modules)', () => {
+    expect(new TextEncoder().encode(URL1).length).toBe(88);
+    // Level M: version 6 (41 modules) + 2 * 4 quiet zone = 49. Level L would fit version 5 (45).
+    expect(qrSvg(URL1)).toContain('viewBox="0 0 49 49"');
+  });
+
+  it('keeps a 4-module quiet zone on every side', () => {
+    const svg = qrSvg(URL1);
+    const size = Number(/viewBox="0 0 (\d+)/.exec(svg)![1]);
+    const coords = [...svg.matchAll(/M(\d+) (\d+)/g)].map((m) => [Number(m[1]), Number(m[2])]);
+    expect(coords.length).toBeGreaterThan(0);
+    const xs = coords.map(([x]) => x);
+    const ys = coords.map(([, y]) => y);
+    // Finder patterns touch the top, left, right and bottom edges of the symbol,
+    // so the dark modules span exactly [4, size - 5] on both axes.
+    expect(Math.min(...xs)).toBe(4);
+    expect(Math.min(...ys)).toBe(4);
+    expect(Math.max(...xs)).toBe(size - 5);
+    expect(Math.max(...ys)).toBe(size - 5);
+  });
+
   it('is deterministic and differs per input', () => {
     expect(qrSvg(URL1)).toBe(qrSvg(URL1));
     expect(qrSvg(URL1)).not.toBe(qrSvg(URL2));
