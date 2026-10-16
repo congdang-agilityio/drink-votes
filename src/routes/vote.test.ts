@@ -106,11 +106,31 @@ describe('POST /outings/:id/vote', () => {
     expect(await res.text()).toContain('Không tìm thấy kèo này.');
   });
 
-  it('still accepts votes after the close time passed', async () => {
+  it('refuses a vote after the close time with a 409 closed page and counts nothing', async () => {
     const { participant, headers } = await asParticipant('Lan');
     const s = await seed(participant.id, '2020-01-02');
+    await getPool().query(
+      'INSERT INTO attendance (outing_id, participant_id, going) VALUES ($1, $2, true)',
+      [s.id, participant.id],
+    );
+    const res = await post(`/outings/${s.id}/vote`, headers, s.a);
+    expect(res.status).toBe(409);
+    const html = await res.text();
+    expect(html).toContain('Kèo đã chốt, không thể thay đổi.');
+    expect(html).toContain(`href="/outings/${s.id}"`);
+    expect(await voteRows(s.id, participant.id)).toBe(0);
+    expect(await counts(s.id)).toEqual([0, 0]);
+  });
+
+  it('refuses a vote change on an outing marked closed and keeps the earlier vote', async () => {
+    const { participant, headers } = await asParticipant('Lan');
+    const s = await seed(participant.id);
     await setAnswer(s.id, participant.id, true);
     expect((await post(`/outings/${s.id}/vote`, headers, s.a)).status).toBe(303);
+    await getPool().query('UPDATE outings SET closed_at = now() WHERE id = $1', [s.id]);
+    const res = await post(`/outings/${s.id}/vote`, headers, s.b);
+    expect(res.status).toBe(409);
+    expect(await res.text()).toContain('Kèo đã chốt, không thể thay đổi.');
     expect(await getVote(s.id, participant.id)).toBe(s.a);
   });
 });

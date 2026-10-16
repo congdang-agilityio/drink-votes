@@ -3,7 +3,7 @@ import { getOuting } from '../db/outings.js';
 import { castVote } from '../db/votes.js';
 import type { IdentityEnv } from '../middleware/identity.js';
 import { Layout } from '../views/layout.js';
-import { OutingNotFound } from '../views/outing-page.js';
+import { OutingClosed, OutingNotFound } from '../views/outing-page.js';
 
 export const vote = new Hono<IdentityEnv>();
 
@@ -19,7 +19,6 @@ function NotGoing({ outingId }: { outingId: string }) {
   );
 }
 
-// No close-time check: votes stay changeable after the close time (Q-01).
 vote.post('/outings/:id{[0-9a-f-]{36}}/vote', async (c) => {
   const id = c.req.param('id');
   const found = await getOuting(id);
@@ -27,6 +26,9 @@ vote.post('/outings/:id{[0-9a-f-]{36}}/vote', async (c) => {
   const venueId = (await c.req.parseBody())['venueId'];
   if (typeof venueId !== 'string') return c.text('Quán không hợp lệ.', 400);
   const result = await castVote(id, c.var.participant.id, venueId);
+  if (result === 'closed') {
+    return c.html(`<!DOCTYPE html>${(<OutingClosed outingId={id} />)}`, 409);
+  }
   if (result === 'not_going') {
     return c.html(`<!DOCTYPE html>${(<NotGoing outingId={id} />)}`, 403);
   }

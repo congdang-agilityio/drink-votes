@@ -1,8 +1,11 @@
-import type { Queryable } from './attendance.js';
+import { type CloseCheckOptions, lockOutingClosed, type Queryable } from './attendance.js';
 import { getPool } from './pool.js';
 
-/** Outcome of a vote: stored, refused because the person is not Going, or not an outing venue. */
-export type VoteResult = 'ok' | 'not_going' | 'unknown_venue';
+/**
+ * Outcome of a vote: stored, refused because the outing is closed, the person is not Going,
+ * or the venue is not one of the outing's.
+ */
+export type VoteResult = 'ok' | 'closed' | 'not_going' | 'unknown_venue';
 
 /** Votes for one venue of the outing. Counts only: never who voted (privacy). */
 export interface VenueCount {
@@ -15,26 +18,35 @@ const isUuid = (id: unknown): id is string => typeof id === 'string' && UUID_RE.
 
 /**
  * Stores the person's single vote for the outing, replacing any earlier one, in one
- * transaction. The attendance row is locked first (`FOR UPDATE`), so a concurrent switch to
- * Not going either runs before (the vote is refused) or after (it deletes the vote).
+ * transaction. The outing row is locked first (`FOR SHARE`) and a closed outing refuses with
+ * 'closed' (see lockOutingClosed). Then the attendance row is locked (`FOR UPDATE`), so a
+ * concurrent switch to Not going either runs before (the vote is refused) or after (it
+ * deletes the vote).
  */
 export async function castVote(
   outingId: string,
   participantId: string,
   venueId: string,
+  opts: CloseCheckOptions = {},
 ): Promise<VoteResult> {
   if (!isUuid(outingId) || !isUuid(participantId)) return 'not_going';
   const client = await getPool().connect();
   let failure: Error | undefined;
   try {
     await client.query('BEGIN');
-    const att = await client.query<{ going: boolean }>(
-      `SELECT going FROM attendance
-        WHERE outing_id = $1 AND participant_id = $2 FOR UPDATE`,
-      [outingId, participantId],
-    );
+    const closed = await lockOutingClosed(client, outingId, opts);
+    const going = async () =>
+      (
+        await client.query<{ going: boolean }>(
+          `SELECT going FROM attendance
+            WHERE outing_id = $1 AND participant_id = $2 FOR UPDATE`,
+          [outingId, participantId],
+        )
+      ).rows[0]?.going === true;
     let result: VoteResult;
-    if (!att.rows[0]?.going) {
+    if (closed) {
+      result = 'closed';
+    } else if (!(await going())) {
       result = 'not_going';
     } else if (
       !isUuid(venueId) ||

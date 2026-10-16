@@ -20,7 +20,7 @@ async function newOuting(organizerId: string): Promise<string> {
   const a = await createVenue({ name: `A ${Math.random()}`, address: 'a' });
   const b = await createVenue({ name: `B ${Math.random()}`, address: 'b' });
   return createOuting({
-    date: '2026-12-31',
+    date: '2030-12-31',
     sitTime: '18:30',
     closeTime: '16:00',
     venueIds: [a.id, b.id],

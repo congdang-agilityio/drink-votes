@@ -47,7 +47,8 @@ describe('listUpcomingOutings', () => {
     const o = await createParticipant('Minh');
     const lan = await createParticipant('Lan');
     const bao = await createParticipant('Bao');
-    const id = await outing(o.id, '2026-10-16');
+    // Dated in the future: answers are refused once the close time has passed.
+    const id = await outing(o.id, '2030-10-16');
     await setAnswer(id, o.id, true);
     await setAnswer(id, lan.id, true);
     await setAnswer(id, bao.id, false);

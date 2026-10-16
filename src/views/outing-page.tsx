@@ -118,3 +118,18 @@ export function OutingNotFound() {
     </Layout>
   );
 }
+
+export const OUTING_CLOSED_MESSAGE = 'Kèo đã chốt, không thể thay đổi.';
+
+/** Shown (409) when an answer or a vote arrives for a closed outing. */
+export function OutingClosed({ outingId }: { outingId: string }) {
+  return (
+    <Layout title="Kèo đã chốt">
+      <h1>Kèo đã chốt</h1>
+      <p>{OUTING_CLOSED_MESSAGE}</p>
+      <p>
+        <a href={`/outings/${outingId}`}>Quay lại kèo</a>
+      </p>
+    </Layout>
+  );
+}

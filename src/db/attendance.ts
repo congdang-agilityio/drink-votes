@@ -1,4 +1,5 @@
 import type pg from 'pg';
+import { config } from '../config.js';
 import { getPool } from './pool.js';
 
 /** Going headcount and names of an outing, in first-answer order. */
@@ -10,11 +11,42 @@ export interface Attendance {
 /** Anything that runs a query: the shared pool or a client inside a transaction. */
 export type Queryable = Pick<pg.Pool | pg.PoolClient, 'query'>;
 
+/** Outcome of an answer: stored, or refused because the outing is closed. */
+export type AnswerResult = 'ok' | 'closed';
+
+/** Clock and zone for the close check; tests pass a fixed `now`. */
+export interface CloseCheckOptions {
+  now?: Date;
+  tz?: string;
+}
+
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const isUuid = (id: unknown): id is string => typeof id === 'string' && UUID_RE.test(id);
 
 /**
- * Records the answer as one upsert: a person has exactly one row per outing. A change keeps
+ * Locks the outing row `FOR SHARE` (the closing service takes it `FOR UPDATE`, so a close
+ * waits for in-flight answers and votes, and they wait for it) and tells whether it is closed:
+ * marked closed, or `now` at or after its close time on its date in `tz`. The time check
+ * freezes changes at the close instant even before the close sweep runs. null = no outing.
+ * Call it first inside the transaction, before any attendance or vote row is locked.
+ */
+export async function lockOutingClosed(
+  db: Queryable,
+  outingId: string,
+  { now = new Date(), tz = config.appTz }: CloseCheckOptions = {},
+): Promise<boolean | null> {
+  const { rows } = await db.query<{ closed: boolean }>(
+    `SELECT closed_at IS NOT NULL
+            OR $2::timestamptz >= (outing_date + close_time) AT TIME ZONE $3 AS closed
+       FROM outings WHERE id = $1 FOR SHARE`,
+    [outingId, now.toISOString(), tz],
+  );
+  return rows[0] ? rows[0].closed : null;
+}
+
+/**
+ * Refuses with 'closed' (writing nothing) when the outing is closed (see lockOutingClosed).
+ * Otherwise records the answer as one upsert: a person has exactly one row per outing. A change keeps
  * answered_at (first answer) and moves updated_at. Not going also deletes the person's vote
  * (BR-11) in the same transaction; the upsert locks the attendance row first, so a concurrent
  * castVote cannot slip a vote in between. Pass `db` to run inside the caller's transaction;
@@ -25,19 +57,21 @@ export async function setAnswer(
   participantId: string,
   going: boolean,
   db?: Queryable,
-): Promise<void> {
+  opts: CloseCheckOptions = {},
+): Promise<AnswerResult> {
   if (!isUuid(outingId) || !isUuid(participantId)) {
     throw new Error('Invalid outing or participant id');
   }
   if (typeof going !== 'boolean') throw new Error('Invalid answer');
-  if (db) return writeAnswer(db, outingId, participantId, going);
+  if (db) return writeAnswer(db, outingId, participantId, going, opts);
 
   const client = await getPool().connect();
   let failure: Error | undefined;
   try {
     await client.query('BEGIN');
-    await writeAnswer(client, outingId, participantId, going);
+    const result = await writeAnswer(client, outingId, participantId, going, opts);
     await client.query('COMMIT');
+    return result;
   } catch (err) {
     await client.query('ROLLBACK').catch(() => undefined);
     failure = err instanceof Error ? err : new Error(String(err));
@@ -53,7 +87,10 @@ async function writeAnswer(
   outingId: string,
   participantId: string,
   going: boolean,
-): Promise<void> {
+  opts: CloseCheckOptions,
+): Promise<AnswerResult> {
+  // An unknown outing (null) falls through: the insert's foreign key rejects it.
+  if (await lockOutingClosed(db, outingId, opts)) return 'closed';
   await db.query(
     `INSERT INTO attendance (outing_id, participant_id, going)
      VALUES ($1, $2, $3)
@@ -67,6 +104,7 @@ async function writeAnswer(
       participantId,
     ]);
   }
+  return 'ok';
 }
 
 /** true = Going, false = Not going, null = not answered (or a malformed id). */
